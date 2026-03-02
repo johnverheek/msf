@@ -135,6 +135,7 @@ public record MsfHeader(
     public static final int FLAG_HAS_CONSTRUCTION_LAYERS = FeatureFlags.HAS_CONSTRUCTION_LAYERS;
     public static final int FLAG_HAS_VARIANT_SYSTEM = FeatureFlags.HAS_VARIANT_SYSTEM;
     public static final int FLAG_HAS_PALETTE_SUBSTITUTION = FeatureFlags.HAS_PALETTE_SUBSTITUTION_RULES;
+    public static final int FLAG_DELTA_FORMAT = FeatureFlags.DELTA_DIFF_FORMAT;
 
     /**
      * Creates a new builder for constructing MsfHeader instances.

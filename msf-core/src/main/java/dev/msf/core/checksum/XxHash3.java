@@ -51,4 +51,36 @@ public final class XxHash3 {
     public static long hash(byte[] data) {
         return hash(data, 0, data.length);
     }
+
+    /**
+     * Computes the header checksum: xxHash3-64 of bytes 0–39 of the given buffer.
+     * The buffer must be at least 40 bytes.
+     *
+     * @param headerBytes the 48-byte header buffer (only bytes 0–39 are hashed)
+     * @return the 64-bit digest
+     * @throws IllegalArgumentException if the buffer is shorter than 40 bytes
+     */
+    public static long headerChecksum(byte[] headerBytes) {
+        if (headerBytes.length < 40) {
+            throw new IllegalArgumentException(
+                "headerChecksum requires at least 40 bytes, got " + headerBytes.length);
+        }
+        return hash(headerBytes, 0, 40);
+    }
+
+    /**
+     * Computes the file checksum: xxHash3-64 of all bytes except the final 8.
+     * The file must be at least 9 bytes.
+     *
+     * @param fileBytes the complete file bytes including the 8-byte checksum trailer
+     * @return the 64-bit digest
+     * @throws IllegalArgumentException if the buffer is shorter than 9 bytes
+     */
+    public static long fileChecksum(byte[] fileBytes) {
+        if (fileBytes.length < 9) {
+            throw new IllegalArgumentException(
+                "fileChecksum requires at least 9 bytes, got " + fileBytes.length);
+        }
+        return hash(fileBytes, 0, fileBytes.length - 8);
+    }
 }
