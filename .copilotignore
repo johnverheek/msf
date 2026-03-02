@@ -1,0 +1,25 @@
+# Build artifacts
+build/
+out/
+dist/
+target/
+*.class
+*.jar
+
+# IDE
+.idea/
+.vscode/
+*.iml
+*.swp
+*.swo
+
+# Dependencies
+.gradle/
+node_modules/
+
+# System files
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log

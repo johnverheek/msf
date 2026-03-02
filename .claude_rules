@@ -1,0 +1,61 @@
+# Claude.ai Rules for MSF Project
+
+## Project Overview
+MSF is a multi-module Java 21 project with Gradle build system containing:
+- **msf-core**: Core functionality and utilities
+- **msf-fabric**: Integration and fabric layer
+
+## Code Style & Conventions
+
+### Naming Conventions
+- Classes: PascalCase (e.g., `UserManager`, `DataProcessor`)
+- Methods: camelCase (e.g., `getUserById`, `processData`)
+- Constants: UPPER_SNAKE_CASE (e.g., `MAX_RETRY_ATTEMPTS`)
+- Packages: lowercase.with.dots (e.g., `com.example.msf.core.util`)
+
+### Code Organization
+- One public class per file (unless inner classes are necessary)
+- Private/package-private methods before public methods
+- Static content before instance content
+
+### Java Best Practices
+- Use var for obvious type inference (Java 21 feature)
+- Prefer composition over inheritance
+- Use records for immutable data classes when appropriate
+- Apply sealed classes for constrained hierarchies
+- Leverage text blocks for multi-line strings
+
+### Testing
+- Unit tests in `src/test/java` mirroring `src/main/java` structure
+- Test class naming: `<ClassUnderTest>Test`
+- Use JUnit 4 assertions
+- Aim for >80% code coverage
+
+## Module Dependencies
+- msf-fabric depends on msf-core
+- msf-core has no module dependencies
+- All external dependencies managed in root build.gradle
+
+## Architectural Principles
+1. **Separation of Concerns**: Core provides abstractions, Fabric provides implementations
+2. **Immutability**: Prefer immutable data structures
+3. **Fail-fast**: Validate inputs early
+4. **Clear APIs**: Public methods should have clear contracts
+5. **Testability**: Design for unit testing
+
+## Documentation Requirements
+- All public classes/methods must have Javadoc
+- Complex logic should include inline comments
+- Architecture decisions documented in ADR/
+
+## Git Conventions
+- Branch naming: `feature/`, `bugfix/`, `refactor/` prefixes
+- Commit messages: Present tense, descriptive ("Add user validation" not "Added")
+- PR descriptions should reference relevant ADRs or issues
+
+## When Generating Code
+1. Always include Javadoc for public APIs
+2. Follow existing code style in the module
+3. Consider msf-core vs msf-fabric separation
+4. Add corresponding unit tests
+5. Update relevant documentation
