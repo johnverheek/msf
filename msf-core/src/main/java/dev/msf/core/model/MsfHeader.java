@@ -124,4 +124,150 @@ public record MsfHeader(
     public boolean hasBiomeData() {
         return hasFlag(FeatureFlags.HAS_BIOME_DATA);
     }
+
+    // Convenience constants matching test expectations
+    public static final int FLAG_HAS_ENTITIES = FeatureFlags.HAS_ENTITIES;
+    public static final int FLAG_HAS_BLOCK_ENTITIES = FeatureFlags.HAS_BLOCK_ENTITIES;
+    public static final int FLAG_HAS_BIOME_DATA = FeatureFlags.HAS_BIOME_DATA;
+    public static final int FLAG_HAS_LIGHTING_HINTS = FeatureFlags.HAS_LIGHTING_HINTS;
+    public static final int FLAG_MULTI_REGION = FeatureFlags.MULTI_REGION;
+    public static final int FLAG_HAS_SIGNAL_PORTS = FeatureFlags.HAS_SIGNAL_PORTS;
+    public static final int FLAG_HAS_CONSTRUCTION_LAYERS = FeatureFlags.HAS_CONSTRUCTION_LAYERS;
+    public static final int FLAG_HAS_VARIANT_SYSTEM = FeatureFlags.HAS_VARIANT_SYSTEM;
+    public static final int FLAG_HAS_PALETTE_SUBSTITUTION = FeatureFlags.HAS_PALETTE_SUBSTITUTION_RULES;
+
+    /**
+     * Creates a new builder for constructing MsfHeader instances.
+     *
+     * @return a new builder
+     */
+    public static Builder builder() {
+        return new Builder();
+    }
+
+    /**
+     * Builder for constructing {@link MsfHeader} instances.
+     */
+    public static final class Builder {
+        private int majorVersion = SUPPORTED_MAJOR_VERSION;
+        private int minorVersion = SUPPORTED_MINOR_VERSION;
+        private int featureFlags = 0;
+        private long mcDataVersion = 0;
+        private long metadataBlockOffset = 0;
+        private long globalPaletteOffset = 0;
+        private long layerIndexOffset = 0;
+        private long entityBlockOffset = 0;
+        private long blockEntityBlockOffset = 0;
+        private long fileSize = 0;
+        private long headerChecksum = 0;
+
+        /**
+         * Sets the major version.
+         */
+        public Builder majorVersion(int version) {
+            this.majorVersion = version;
+            return this;
+        }
+
+        /**
+         * Sets the minor version.
+         */
+        public Builder minorVersion(int version) {
+            this.minorVersion = version;
+            return this;
+        }
+
+        /**
+         * Sets the feature flags.
+         */
+        public Builder featureFlags(long flags) {
+            this.featureFlags = (int) flags;
+            return this;
+        }
+
+        /**
+         * Sets the Minecraft data version.
+         */
+        public Builder mcDataVersion(long version) {
+            this.mcDataVersion = version;
+            return this;
+        }
+
+        /**
+         * Sets the metadata block offset.
+         */
+        public Builder metadataBlockOffset(long offset) {
+            this.metadataBlockOffset = offset;
+            return this;
+        }
+
+        /**
+         * Sets the global palette offset.
+         */
+        public Builder globalPaletteOffset(long offset) {
+            this.globalPaletteOffset = offset;
+            return this;
+        }
+
+        /**
+         * Sets the layer index offset.
+         */
+        public Builder layerIndexOffset(long offset) {
+            this.layerIndexOffset = offset;
+            return this;
+        }
+
+        /**
+         * Sets the entity block offset.
+         */
+        public Builder entityBlockOffset(long offset) {
+            this.entityBlockOffset = offset;
+            return this;
+        }
+
+        /**
+         * Sets the block entity block offset.
+         */
+        public Builder blockEntityBlockOffset(long offset) {
+            this.blockEntityBlockOffset = offset;
+            return this;
+        }
+
+        /**
+         * Sets the file size.
+         */
+        public Builder fileSize(long size) {
+            this.fileSize = size;
+            return this;
+        }
+
+        /**
+         * Sets the header checksum.
+         */
+        public Builder headerChecksum(long checksum) {
+            this.headerChecksum = checksum;
+            return this;
+        }
+
+        /**
+         * Builds and returns the MsfHeader instance.
+         *
+         * @return a new MsfHeader with the configured values
+         */
+        public MsfHeader build() {
+            return new MsfHeader(
+                majorVersion,
+                minorVersion,
+                featureFlags,
+                mcDataVersion,
+                metadataBlockOffset,
+                globalPaletteOffset,
+                layerIndexOffset,
+                entityBlockOffset,
+                blockEntityBlockOffset,
+                fileSize,
+                headerChecksum
+            );
+        }
+    }
 }

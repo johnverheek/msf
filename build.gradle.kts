@@ -27,11 +27,15 @@ subprojects {
         options.encoding = "UTF-8"
     }
 
+    dependencies {
+        testImplementation("org.junit.jupiter:junit-jupiter:5.10.0")
+    }
+
     tasks.withType<Test>().configureEach {
         useJUnitPlatform()
     }
 
-    publishing {
+    configure<PublishingExtension> {
         publications {
             create<MavenPublication>("mavenJava") {
                 from(components["java"])
