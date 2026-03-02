@@ -1,44 +1,19 @@
 # MSF Project Maintainers
 
 ## Project Lead
-- **Name**: [To be assigned]
-- **Role**: Overall project direction and decision-making
-- **Contact**: [To be assigned]
 
-## Module Maintainers
-
-### msf-core
-- **Lead**: [To be assigned]
-- **Responsibilities**: Core functionality, abstractions, utilities
-- **Review Requirements**: Architectural alignment, backwards compatibility
-
-### msf-fabric
-- **Lead**: [To be assigned]
-- **Responsibilities**: Integration layer, implementations
-- **Review Requirements**: msf-core dependency compatibility
+- **Name:** John Verheek
+- **Role:** Format design, specification authorship, reference implementation
 
 ## Responsibilities
 
-All maintainers are responsible for:
-1. Code review and quality standards
-2. Architectural consistency
-3. Documentation accuracy
-4. Test coverage and quality
-5. Release planning and versioning
-6. Community communication
+- Specification authorship and review
+- Reference implementation (msf-core, msf-fabric)
+- Versioning decisions
+- Community communication
 
-## Decision Making
+## Versioning Policy
 
-- **Minor changes** (bugs, small features): Individual maintainer approval
-- **Significant changes**: Lead maintainer approval + architectural review
-- **Major decisions**: Project lead consultation + RFC process (see ADR template)
+MSF V1 evolves by addition only. See ADR-0002 and spec Section 12 for the full versioning contract. Breaking changes require a major version increment — a bar that is intentionally very high.
 
-## Contact & Communication
-
-- **Discussions**: GitHub Discussions or project chat
-- **Issues**: GitHub Issues with appropriate labels
-- **Security**: [To be established]
-
-## Onboarding New Contributors
-
-See [CONTRIBUTING.md](CONTRIBUTING.md) for contribution guidelines.
+Minor version increments add new optional features via new feature flag bits and new optional blocks. They never remove or redefine existing functionality.

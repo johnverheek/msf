@@ -1,417 +1,127 @@
 # MSF Module Guide
 
-Detailed guide to developing within each module.
+## msf-core
 
-## Overview
+### Adding a new model class
 
-```
-msf-core ←── Pure business logic, no dependencies
-    ↓
-msf-fabric ←── Implementations, integrations
-```
-
-## msf-core Module
-
-### Purpose
-Core business logic and domain abstractions. This module contains zero external dependencies beyond Java stdlib.
-
-### Key Characteristics
-- ✅ Pure business logic
-- ✅ Domain models
-- ✅ Business rules and algorithms
-- ✅ Abstract interfaces
-- ❌ No external library dependencies
-- ❌ No references to msf-fabric
-
-### Package Structure (Planned)
-```
-com.example.msf.core
-├── model/              # Domain objects
-│   ├── User.java
-│   ├── UserCreationRequest.java
-│   └── Status.java
-├── service/            # Service interfaces
-│   ├── UserService.java
-│   ├── PermissionService.java
-│   └── ValidationService.java
-├── util/               # Utilities
-│   ├── StringUtils.java
-│   └── DateUtils.java
-├── exception/          # Domain exceptions
-│   ├── UserNotFoundException.java
-│   ├── InvalidDataException.java
-│   └── DomainException.java
-└── validator/          # Validation logic
-    ├── EmailValidator.java
-    ├── PasswordValidator.java
-    └── DataValidator.java
-```
-
-### Development Guidelines
-
-#### Adding a New Domain Model
-1. Create record or immutable class in `model/`
-2. Include all validation in constructor
-3. Add Javadoc
-4. Write comprehensive tests
+Model classes are immutable records. Use a builder for complex construction:
 
 ```java
-package com.example.msf.core.model;
+package dev.msf.core.model;
 
 /**
- * Represents a user in the system.
+ * Represents the global palette block.
+ *
+ * @see <a href="../docs/MSF_Specification_V1.md">MSF Specification Section 4</a>
  */
-public record User(
-    String id,
-    String name,
-    String email
-) {
-    public User {
-        if (id == null || id.isEmpty()) {
-            throw new IllegalArgumentException("ID must not be empty");
+public record MsfPalette(List<String> entries) {
+
+    public MsfPalette {
+        // Defensive copy and immutability
+        entries = List.copyOf(entries);
+        // Validate per spec Section 4.3
+        if (entries.isEmpty() || !entries.get(0).equals("minecraft:air")) {
+            throw new IllegalArgumentException("Palette entry 0 must be minecraft:air");
         }
-        if (name == null || name.isEmpty()) {
-            throw new IllegalArgumentException("Name must not be empty");
-        }
-        if (email == null || !email.contains("@")) {
-            throw new IllegalArgumentException("Email must be valid");
-        }
+    }
+
+    /** Returns the number of entries including the mandatory air entry at ID 0. */
+    public int size() {
+        return entries.size();
     }
 }
 ```
 
-#### Adding a Service Interface
-1. Create interface in `service/`
-2. Define clear contract with Javadoc
-3. Use standard method naming (get*, find*, save*, delete*)
-4. Use Optional for optional results
+### Adding a read/write method to MsfReader/MsfWriter
+
+Every read and write method accepts `@Nullable Consumer<MsfWarning>` as the final parameter:
 
 ```java
-package com.example.msf.core.service;
-
-import java.util.Optional;
-import com.example.msf.core.model.User;
-
 /**
- * Service for managing users.
+ * Reads the global palette block from the given input stream.
+ *
+ * @param in       input stream positioned at the start of the palette block
+ * @param warnings optional consumer for non-fatal warnings; may be null
+ * @return the parsed palette
+ * @throws MsfParseException if the palette is malformed
+ * @throws IOException       if an IO error occurs
  */
-public interface UserService {
-    /**
-     * Retrieves a user by ID.
-     *
-     * @param userId the user ID (must not be null)
-     * @return Optional containing the user if found
-     * @throws IllegalArgumentException if userId is null
-     */
-    Optional<User> findUser(String userId);
-
-    /**
-     * Saves a user.
-     *
-     * @param user the user to save (must not be null)
-     * @throws IllegalArgumentException if user is null
-     */
-    void saveUser(User user);
+public @NotNull MsfPalette readPalette(
+        @NotNull DataInputStream in,
+        @Nullable Consumer<MsfWarning> warnings) throws MsfParseException, IOException {
+    // ...
 }
 ```
 
-#### Adding Validation Logic
-1. Create validator in `validator/` package
-2. Keep validation pure (no side effects)
-3. Return clear results or throw exceptions
+### Emitting a warning
 
 ```java
-package com.example.msf.core.validator;
-
-/**
- * Validates email addresses.
- */
-public class EmailValidator {
-    private static final String EMAIL_PATTERN = 
-        "^[A-Za-z0-9+_.-]+@(.+)$";
-
-    /**
-     * Checks if email format is valid.
-     *
-     * @param email the email to validate
-     * @return true if valid, false otherwise
-     */
-    public static boolean isValid(String email) {
-        if (email == null || email.isEmpty()) {
-            return false;
-        }
-        return email.matches(EMAIL_PATTERN);
-    }
+if (warnings != null) {
+    warnings.accept(new MsfWarning(
+        MsfWarning.Code.RESERVED_FLAG_SET,
+        "Reserved feature flag bits set: 0x" + Integer.toHexString(reservedBits),
+        currentOffset
+    ));
 }
 ```
 
-### High-Level Workflows
+### Throwing with context
 
-#### Create a New Feature in Core
-1. Define domain model in `model/`
-2. Create service interface in `service/`
-3. Add validation logic to model constructor
-4. Create comprehensive unit tests
-5. Document with Javadoc
-6. Reference ADR if architectural decisions needed
+Always include the file offset and the expected vs actual value in exception messages:
 
-### Testing msf-core
-- Unit tests only (no external dependencies)
-- Test pure logic paths
-- Test exception cases
-- Test immutability contracts
-- Target: >85% coverage
+```java
+throw new MsfParseException(
+    "Palette entry count exceeds maximum at offset " + offset +
+    ": found " + entryCount + ", maximum 65535");
+```
+
+### Write-side range validation
+
+```java
+if (value > 0xFFFFL) {
+    throw new IllegalArgumentException(
+        "fieldName exceeds u16 maximum: provided " + value + ", maximum 65535");
+}
+```
 
 ---
 
-## msf-fabric Module
+## msf-fabric
 
-### Purpose
-Integration layer, implementations of core interfaces, and connections to external systems.
+### Adding a bridge class
 
-### Key Characteristics
-- ✅ Implementations of core service interfaces
-- ✅ External integrations (databases, APIs, etc.)
-- ✅ Configuration management
-- ✅ Adapters for external data formats
-- ✅ May depend on external libraries
-- ✅ Depends on msf-core
-- ❌ Should not obscure core abstractions
-
-### Package Structure (Planned)
-```
-com.example.msf.fabric
-├── service/            # Service implementations
-│   └── DefaultUserService.java
-├── integration/        # External system integration
-│   ├── database/
-│   │   └── UserRepository.java
-│   ├── api/
-│   │   └── ExternalApiClient.java
-│   └── messaging/
-│       └── EventPublisher.java
-├── config/             # Configuration
-│   ├── DatabaseConfig.java
-│   └── ServiceConfig.java
-├── adapter/            # Data format adapters
-│   ├── UserJsonAdapter.java
-│   └── RequestDtoAdapter.java
-└── exception/          # Infrastructure exceptions
-    ├── DatabaseException.java
-    └── ExternalServiceException.java
-```
-
-### Development Guidelines
-
-#### Implementing a Core Service
-1. Create class in `service/` implementing core interface
-2. Inject dependencies (database, external services)
-3. Handle infrastructure concerns (error handling, logging)
-4. Add Javadoc
-5. Write integration tests
+Bridge classes resolve MSF opaque strings against Minecraft registries. They must not contain any parsing logic:
 
 ```java
-package com.example.msf.fabric.service;
-
-import java.util.Optional;
-import com.example.msf.core.model.User;
-import com.example.msf.core.service.UserService;
-import com.example.msf.fabric.integration.database.UserRepository;
+package dev.msf.fabric.bridge;
 
 /**
- * Default implementation of UserService using database persistence.
+ * Resolves blockstate strings from MSF palette entries to Minecraft BlockState objects.
  */
-public class DefaultUserService implements UserService {
-    private final UserRepository userRepository;
+public class BlockStateBridge {
 
-    public DefaultUserService(UserRepository userRepository) {
-        if (userRepository == null) {
-            throw new IllegalArgumentException("Repository must not be null");
-        }
-        this.userRepository = userRepository;
-    }
-
-    @Override
-    public Optional<User> findUser(String userId) {
-        if (userId == null) {
-            throw new IllegalArgumentException("User ID must not be null");
-        }
-        
-        try {
-            return userRepository.findById(userId);
-        } catch (Exception e) {
-            throw new RuntimeException("Database error finding user", e);
-        }
-    }
-
-    @Override
-    public void saveUser(User user) {
-        if (user == null) {
-            throw new IllegalArgumentException("User must not be null");
-        }
-        
-        try {
-            userRepository.save(user);
-        } catch (Exception e) {
-            throw new RuntimeException("Database error saving user", e);
-        }
+    /**
+     * Resolves a blockstate string to a Minecraft BlockState.
+     *
+     * @param blockstateString the opaque blockstate string from an MSF palette entry
+     * @param warnings         optional consumer for non-fatal warnings
+     * @return the resolved BlockState
+     * @throws IllegalArgumentException if the string cannot be resolved
+     */
+    public @NotNull BlockState resolve(
+            @NotNull String blockstateString,
+            @Nullable Consumer<MsfWarning> warnings) {
+        // Resolve against Registries.BLOCK
     }
 }
 ```
 
-#### Adding External Integrations
-1. Create interface/class in `integration/`
-2. Use adapters to convert between core and external formats
-3. Handle external errors gracefully
-4. Log integration points
+### Adding world read/write
+
+RegionExtractor reads block data from a live world into MsfRegion. RegionPlacer writes MsfRegion block data to a live world. Both classes delegate all encoding and decoding to msf-core — they only handle the Minecraft API surface:
 
 ```java
-package com.example.msf.fabric.integration.database;
-
-import java.util.Optional;
-import com.example.msf.core.model.User;
-
-/**
- * Database repository for User persistence.
- */
-public interface UserRepository {
-    /**
-     * Finds user by ID.
-     *
-     * @param id the user ID
-     * @return Optional with user if found
-     * @throws DatabaseException if database access fails
-     */
-    Optional<User> findById(String id);
-
-    /**
-     * Persists a user.
-     *
-     * @param user the user to save
-     * @throws DatabaseException if save fails
-     */
-    void save(User user);
-}
+// In RegionExtractor: read from world, produce MsfRegion via msf-core
+// In RegionPlacer: consume MsfRegion via msf-core, write to world
+// Neither class touches bit packing, compression, or checksum logic
 ```
-
-#### Adding Adapters
-```java
-package com.example.msf.fabric.adapter;
-
-import com.example.msf.core.model.User;
-
-/**
- * Adapts between User domain model and JSON representation.
- */
-public class UserJsonAdapter {
-    /**
-     * Converts User to JSON string.
-     *
-     * @param user the user to convert
-     * @return JSON representation
-     */
-    public static String toJson(User user) {
-        // Implementation
-        return "{}";
-    }
-
-    /**
-     * Converts JSON string to User.
-     *
-     * @param json the JSON string
-     * @return parsed User
-     * @throws IllegalArgumentException if JSON is invalid
-     */
-    public static User fromJson(String json) {
-        // Implementation
-        return null;
-    }
-}
-```
-
-### Testing msf-fabric
-- Unit tests with mocked core dependencies
-- Integration tests with real core + mocked external systems
-- Contract tests verifying core interface implementation
-- External integration tests (optional, may use test containers)
-- Target: >75% coverage (less critical for integration code)
-
----
-
-## Cross-Module Communication
-
-### Good Example: Service Implementation
-```
-msf-fabric/service/DefaultUserService
-    ↓ implements
-msf-core/service/UserService
-    ↓ uses types from
-msf-core/model/User
-```
-
-### Dependency Injection Pattern
-```java
-// In fabric: Constructor injection
-public DefaultUserService(UserRepository repo, Logger logger) {
-    this.repo = repo;
-    this.logger = logger;
-}
-
-// Clear dependencies, testable, flexible
-```
-
-### Error Handling Pattern
-```
-External System Exception
-    ↓ caught in fabric
-Wrapped/Translated Exception
-    ↓ thrown to caller
-Core Business Exception or RuntimeException
-```
-
-## Adding New Features
-
-### Step-by-Step: Add User Email Validation Feature
-
-1. **In msf-core:**
-   - Add email validation method to UserService interface
-   - Create EmailValidator with validation logic
-   - Add EmailValidationException
-   - Test thoroughly in core tests
-
-2. **In msf-fabric:**
-   - Implement email validation in DefaultUserService
-   - Integrate with external email service if needed
-   - Handle external API errors
-   - Write integration tests
-
-3. **Documentation:**
-   - Update API_GUIDELINES.md if changing public interface
-   - Add Javadoc to new public methods
-   - Create ADR if architectural decision needed
-
-## Development Workflow
-
-### For msf-core Changes
-```
-1. Create domain model/interface
-2. Write tests
-3. Implement business logic
-4. Add Javadoc
-5. Update documentation if needed
-```
-
-### For msf-fabric Changes
-```
-1. Implement core interface
-2. Add integration setup
-3. Write tests (unit + integration)
-4. Handle errors gracefully
-5. Add logging at integration points
-6. Update documentation
-```
-
-## References
-- [ARCHITECTURE.md](ARCHITECTURE.md)
-- [API_GUIDELINES.md](API_GUIDELINES.md)
-- [CODING_STANDARDS.md](CODING_STANDARDS.md)

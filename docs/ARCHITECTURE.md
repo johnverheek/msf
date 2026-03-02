@@ -2,184 +2,121 @@
 
 ## System Overview
 
-MSF is a multi-module Java 21 application with a layered architecture:
+MSF is a two-module Java 21 library. The dependency direction is one-way:
 
 ```
-┌─────────────────────────────┐
-│    msf-fabric               │  Integration & Implementations
-│  (Integration Layer)        │
-└──────────────┬──────────────┘
-               │ depends on
-┌──────────────▼──────────────┐
-│    msf-core                 │  Core Business Logic
-│  (Business Logic Layer)     │
-└─────────────────────────────┘
+msf-fabric  →  msf-core
 ```
+
+msf-fabric depends on msf-core. msf-core has zero external dependencies beyond its compression and checksum libraries.
 
 ## Module Responsibilities
 
 ### msf-core
-**Purpose**: Pure business logic and domain abstractions
 
-**Characteristics**:
-- No external dependencies (Java stdlib only)
-- No dependencies on other modules
-- Defines interfaces and abstractions
-- Contains domain models and core algorithms
-- No integration or framework-specific code
+**Purpose:** All MSF format logic. This module is the complete, self-contained implementation of the MSF specification.
 
-**Package Structure** (to be defined):
-```
-com.example.msf.core
-├── model/          # Domain objects, records
-├── service/        # Business logic interfaces
-├── util/           # Utility functions
-└── exception/      # Domain exceptions
-```
+**What lives here:**
+- File parsing and serialization (`MsfReader`, `MsfWriter`)
+- All data model classes (`MsfHeader`, `MsfPalette`, `MsfMetadata`, `MsfLayer`, `MsfRegion`, `MsfFile`)
+- Bit packing and block data encoding (`BitPackedArray`, `BlockDataCodec`)
+- Checksum computation (`XxHash3`)
+- Compression and decompression for all four types (`RegionCompressor`, `RegionDecompressor`)
+- YZX block ordering index computation (`YzxOrder`)
+- UUID stripping from binary NBT payloads (`UuidStripper`)
+- The complete exception hierarchy (`MsfException` and subclasses)
+- The warning mechanism (`MsfWarning`, `MsfWarning.Code`)
 
-**Examples**:
-- Data validation logic
-- Business rule enforcement
-- Domain models (Records preferred)
-- Core algorithms
+**What must never appear here:**
+- Any Fabric or Minecraft import
+- Registry lookups of any kind
+- Blockstate string interpretation
+- NBT deserialization
+- Entity type validation
+
+Blockstate strings, entity type strings, and biome identifiers are opaque UTF-8 in this module. They are stored, packed, and retrieved — never interpreted.
+
+**Publishing target:** Maven Central as `dev.msf:msf-core:1.0.0`
 
 ### msf-fabric
-**Purpose**: Integration layer and concrete implementations
 
-**Characteristics**:
-- Depends on msf-core for abstractions
-- Framework integrations and external libraries
-- Concrete implementations of core interfaces
-- May depend on external libraries
-- Bridge between core logic and external systems
+**Purpose:** Bridge between msf-core and a live Minecraft/Fabric environment.
 
-**Package Structure** (to be defined):
-```
-com.example.msf.fabric
-├── service/        # Implementations of core services
-├── integration/    # External system integrations
-├── config/         # Configuration management
-└── adapter/        # Adapters for external data formats
-```
+**What lives here:**
+- Resolving blockstate strings against `Registries.BLOCK`
+- Converting `MsfRegion` block data to/from `BlockState` objects
+- Resolving entity and biome identifier strings against Minecraft registries
+- Converting `MsfEntity` and `MsfBlockEntity` NBT payloads to/from `NbtCompound`
+- Reading block data from a live world into `MsfRegion` (`RegionExtractor`)
+- Writing `MsfRegion` block data to a live world (`RegionPlacer`)
+- Validating blockstate strings against the active MC data version
 
-**Examples**:
-- Database implementations
-- API clients
-- Configuration providers
-- Framework-specific code
+**What must never appear here:**
+- Any MSF parsing or encoding logic
+- Copies of bit packing, checksum, or compression code
+- Any class that duplicates msf-core functionality
 
-## Dependency Model
+**Publishing target:** Modrinth and CurseForge as `msf-fabric:1.0.0+1.21.1`
+
+## Package Structure
 
 ```
-External Libraries
-       ↓
-msf-fabric ← can depend on external libraries
-       ↑
-    (implements)
-       ↑
-msf-core ← pure logic, no dependencies
+dev.msf.core
+  io/           MsfReader, MsfWriter
+  model/        MsfFile, MsfHeader, MsfLayer, MsfRegion, MsfPalette, MsfMetadata,
+                MsfEntity, MsfBlockEntity
+  codec/        BitPackedArray, BlockDataCodec
+  checksum/     XxHash3
+  compression/  CompressionType, RegionCompressor, RegionDecompressor
+  util/         YzxOrder, UuidStripper
+  exception/    MsfException, MsfParseException, MsfVersionException,
+                MsfChecksumException, MsfPaletteException, MsfCompressionException
+
+dev.msf.fabric
+  bridge/       BlockStateBridge, EntityBridge, BiomeBridge
+  world/        RegionExtractor, RegionPlacer
+  validation/   BlockStateValidator, DataVersionChecker
 ```
 
-## Design Patterns & Principles
+## Key Design Decisions
 
-### 1. Separation of Concerns
-- Core provides abstractions; fabric provides implementations
-- Each module has single responsibility
-- Clear contracts between modules
+**Global palette, shared across all regions.** Palette ID 0 is always `minecraft:air` — this is a format invariant, not a convention. The palette is read once and referenced by all region block data.
 
-### 2. Dependency Inversion
-- High-level modules (fabric) depend on abstractions (core)
-- Concrete implementations are decoupled from clients
-- Use interfaces in core, implementations in fabric
+**YZX block ordering.** Y is the outermost index, X is the innermost. Chosen for cache-friendly vertical operations (lighting propagation, column-based processing).
 
-### 3. Immutability
-- Prefer immutable objects (Java records)
-- Reduces bugs and side effects
-- Easier to reason about state
+**Per-region compression.** Each region declares its compression type independently. zstd is the default and recommended compression. Readers must support all four types: none, zstd, lz4, brotli.
 
-### 4. Fail-Fast
-- Validate inputs at module boundaries
-- Throw exceptions for invalid states
-- Clear error messages
+**Bit packing with no-span rule.** Palette IDs are packed into u64 words from the LSB. Entries never span word boundaries — when an entry would cross a boundary it begins in the next word.
 
-## Module Communication
+**Semantic layers, not viewport layers.** Layers carry meaning about construction sequence and logical grouping. Viewport slicing is a tool concern. The format defines what layers exist; tools define how they are displayed.
 
-### Recommended Patterns
+**Append-only versioning.** The format grows by addition only. Features are never removed. Flag bits are never reassigned. Block types are never retired. Any V1 reader can read any V1 file via the block length prefix skip mechanism.
 
-**1. Interface-based Integration**
-```java
-// In msf-core
-public interface UserService {
-    User getUserById(String userId);
-    void saveUser(User user);
-}
+**Frozen 48-byte header.** The header layout is permanently fixed. It will never change within major version 1.
 
-// In msf-fabric
-public class UserServiceImpl implements UserService {
-    // Implementation details
-}
-```
-
-**2. Data Transfer Objects (DTOs)**
-- Use records for immutable DTOs
-- Defined in core
-- Used at module boundaries
-
-**3. Exception Handling**
-- Custom exceptions in core for domain errors
-- Fabric handles infrastructure exceptions
-- Wrap external exceptions at boundaries
-
-## Data Flow
+## Exception Hierarchy
 
 ```
-External System
-       ↓ (adapter)
-msf-fabric (Adapter layer)
-       ↓ (interface call)
-msf-core (Business logic)
-       ↑ (return domain object)
-msf-fabric (Translate to external format)
-       ↓
-External System
+MsfException (checked)
+  MsfParseException       malformed file structure
+  MsfVersionException     unsupported major version
+  MsfChecksumException    checksum verification failure
+  MsfPaletteException     palette encoding or lookup error
+  MsfCompressionException compression or decompression failure
 ```
 
-## Scalability Considerations
+## Reader Failure Precedence
 
-1. **Horizontal Scaling**: Stateless services in fabric
-2. **Vertical Specialization**: Separate concerns within modules
-3. **Caching**: Implement in fabric with core-defined interfaces
-4. **Async Operations**: Facade patterns in fabric for async msf-core calls
+1. Magic byte mismatch → `MsfParseException`, stop immediately
+2. Header checksum failure → `MsfChecksumException`, stop immediately
+3. Unsupported major version → `MsfVersionException`, stop immediately
+4. File size mismatch → warn, attempt to continue
+5. File checksum failure → warn, stop at caller's discretion
+6. Unknown feature flag → ignore, continue
+7. Unknown block type → skip via length prefix, continue
 
-## Security Considerations
+## Warning Mechanism
 
-1. **Input Validation**: msf-core validates
-2. **Access Control**: msf-fabric enforces
-3. **Sensitive Data**: msf-core defines sensitivity; fabric handles securely
-4. **Audit Logging**: msf-fabric logs integration points
+Non-fatal diagnostic conditions are reported via `Consumer<MsfWarning>` passed to all read and write methods. Warnings are never written to stdout, stderr, or any logging framework — routing is the caller's responsibility.
 
-## Future Expansion
-
-As the project grows:
-- Separate read/write models (CQRS pattern in fabric)
-- Event-driven architecture (fabric publishes events from core operations)
-- Additional integration modules (msf-database, msf-api, etc.)
-- Domain-specific languages (DSL) in core for complex logic
-
-## Testing Architecture
-
-```
-msf-core Tests
-├── Unit tests (pure logic)
-└── Domain model tests
-
-msf-fabric Tests
-├── Unit tests (with mock core)
-├── Integration tests (with real core)
-└── Contract tests (core ↔ fabric boundary)
-```
-
-## References
-- [Module Guide](MODULE_GUIDE.md)
-- [API Guidelines](API_GUIDELINES.md)
-- Architecture Decision Records in [ADR/](ADR/)
+See `docs/CODING_STANDARDS.md` for the full warning code table.

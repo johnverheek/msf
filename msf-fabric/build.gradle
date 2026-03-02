@@ -1,8 +1,0 @@
-plugins {
-    id 'java-library'
-}
-
-dependencies {
-    // Fabric module depends on Core
-    implementation project(':msf-core')
-}

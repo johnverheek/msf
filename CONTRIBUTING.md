@@ -2,84 +2,82 @@
 
 ## Getting Started
 
-1. **Clone the repository** and open in VS Code with Copilot integration
-2. **Build the project**: `./gradlew build`
-3. **Run tests**: `./gradlew test`
+1. Clone the repository
+2. Ensure Java 21 is installed: `java -version`
+3. Build the project: `./gradlew build`
+4. Run tests: `./gradlew test`
 
-## Development Workflow
+## Project Structure
 
-### Branch Naming
-- Feature: `feature/description-here`
-- Bug fix: `bugfix/issue-description`
-- Refactor: `refactor/what-changed`
-- Documentation: `docs/topic`
+```
+msf/
+  msf-core/       Pure Java 21, no Minecraft dependencies
+  msf-fabric/     Fabric bridge, depends on msf-core
+  docs/           Specification and documentation
+```
 
-### Commit Messages
-- Use present tense: "Add feature" not "Added feature"
-- Be descriptive: Explain what and why, not just what
-- Reference issues when applicable: "Fix login bug (closes #123)"
-- Keep first line under 50 characters, wrap body at 72 characters
+The full specification lives at `docs/MSF_Specification_V1.md`. Read it before making changes to parsing or encoding logic — every normative requirement is referenced by spec section in the implementation.
 
-### Pull Requests
-- Link related issues in description
-- Describe the change and motivation
-- Update documentation if needed
-- Ensure all tests pass: `./gradlew test`
+## Module Boundaries
+
+**msf-core** must remain free of all Fabric and Minecraft dependencies. Blockstate strings, entity type strings, and biome identifiers are opaque UTF-8 in msf-core — never validated against a registry. NBT payloads are raw bytes — never deserialized. If a change requires Minecraft registry lookup it belongs in msf-fabric.
+
+**msf-fabric** contains zero MSF parsing logic. It delegates entirely to msf-core and handles only the conversion between MSF model types and Minecraft types.
+
+## Branch Naming
+
+- `feat/description` — new functionality
+- `fix/description` — bug fixes
+- `refactor/description` — code changes with no behaviour change
+- `docs/description` — documentation only
+- `test/description` — test additions or corrections
+
+## Commit Messages
+
+Follow Conventional Commits:
+
+```
+feat: add biome data round trip support
+fix: correct packed array length overflow for large regions
+refactor: extract compression type handling into sealed class
+docs: update spec Section 7.5 with overflow guidance
+test: add boundary condition tests for BitPackedArray
+```
 
 ## Code Standards
 
-### Java Coding Standards
-- Follow conventions in `.claude_rules`
-- Max line length: 120 characters (see `.editorconfig`)
-- Use 4-space indentation
-- Always add Javadoc to public methods/classes
+See [docs/CODING_STANDARDS.md](CODING_STANDARDS.md) for full detail. Key requirements:
 
-### Testing Requirements
-- Write unit tests for new features
-- Test file location mirrors source: `src/main/java/com/example/Foo.java` → `src/test/java/com/example/FooTest.java`
-- Aim for >80% code coverage
-- Use descriptive test method names: `testUserCreationWithValidEmail()`
+- Java 21 — records, sealed classes, pattern matching, switch expressions. No preview features.
+- 4 space indentation, 120 character line limit
+- `@NotNull` / `@Nullable` on all public method signatures
+- `Optional<T>` over null on public APIs
+- `Consumer<MsfWarning>` parameter on all read and write methods
+- Records for all immutable model classes
+- Builders for complex object construction
 
-### Module Guidelines
-- **msf-core**: Pure business logic, no dependencies on msf-fabric
-- **msf-fabric**: Can depend on msf-core, integrations and implementations
-- Keep modules loosely coupled
+## Testing Requirements
 
-## Documentation
+Every change affecting parsing or encoding must include:
 
-Update relevant documentation when:
-- Adding new public APIs (Javadoc + API_GUIDELINES.md)
-- Making architectural decisions (create ADR in docs/ADR/)
-- Changing module responsibilities (update MODULE_GUIDE.md)
-- Adding new conventions (update CODING_STANDARDS.md)
+- Happy path round trip — write then read produces identical data
+- Boundary conditions — minimum values, maximum values
+- Failure modes — the specific exception type the spec requires, not a generic exception
+- If the spec says warn and continue, the test must verify the warning was emitted AND parsing continued
 
-## Code Review Checklist
+Tests live in `msf-core/src/test/java/` mirroring the main source structure. Synthetic binary test files for known-good and corruption cases live in `msf-core/src/test/resources/`.
 
-Before submitting a PR:
-- [ ] Code follows style guide in `.editorconfig`
-- [ ] All public APIs have Javadoc
-- [ ] New tests added and all tests pass
-- [ ] No decreases in code coverage
-- [ ] Documentation updated
-- [ ] Commit messages are descriptive
-- [ ] No unnecessary dependencies added
+## Spec References in Code
 
-## Using AI Assistants
+When implementing a normative requirement, cite the spec section inline:
 
-### Claude.ai Desktop App
-- Reference `.claude_rules` for coding standards
-- Ask Claude to enforce project conventions
-- Use for architecture planning and design discussions
+```java
+// Palette ID 0 is always AIR per spec Section 4.3 — write unconditionally
+palette.add(0, "minecraft:air");
+```
 
-### VS Code Copilot
-- Should auto-follow `.editorconfig` formatting
-- Copilot context is filtered by `.copilotignore`
-- Use for code completion and refactoring suggestions
+## Pull Requests
 
-## Questions?
-
-Refer to:
-- [Architecture Overview](docs/ARCHITECTURE.md)
-- [Module Guide](docs/MODULE_GUIDE.md)
-- [API Guidelines](docs/API_GUIDELINES.md)
-- [Road Map](docs/ROADMAP.md)
+- Reference the spec section if the change implements or corrects a normative requirement
+- All tests must pass: `./gradlew test`
+- No new Minecraft or Fabric dependencies in msf-core
