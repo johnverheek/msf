@@ -1,13 +1,14 @@
 # MSF (Minecraft Structured Format) Specification
+
 ## Version 1.0 — DRAFT
 
----
+-----
 
 ## Status of This Document
 
-This is the normative specification for the MSF file format version 1.0. Implementations claiming MSF V1 compliance must conform to all normative requirements in this document. Normative requirements are indicated by the keywords MUST, MUST NOT, SHALL, SHALL NOT, SHOULD, SHOULD NOT, MAY, and OPTIONAL as defined in RFC 2119.
+This is the normative specification for the MSF file format version 1.0. Implementations claiming MSF V1 compliance MUST conform to all normative requirements in this document. Normative requirements are indicated by the keywords MUST, MUST NOT, SHALL, SHALL NOT, SHOULD, SHOULD NOT, MAY, and OPTIONAL as defined in RFC 2119.
 
----
+-----
 
 ## 1. Introduction
 
@@ -24,12 +25,14 @@ MSF is a binary file format for storing Minecraft structure schematics. It is de
 ### 1.2 Scope
 
 This specification defines:
+
 - The binary layout of MSF files
 - The encoding of all data blocks
 - Normative requirements for readers and writers
 - The versioning contract
 
 This specification does not define:
+
 - How tools render or visualize MSF data
 - How tools implement user interaction
 - How tools implement viewport slicing or layer toggling
@@ -45,7 +48,7 @@ This specification does not define:
 - **Writer** — any implementation that produces MSF files.
 - **MC data version** — the integer data version Minecraft assigns to each release, accessible via the game's version.json.
 
----
+-----
 
 ## 2. File Structure
 
@@ -68,16 +71,16 @@ Components beyond the header MAY appear in any order in the file. Readers MUST u
 
 All multi-byte integers are **little-endian** unless otherwise specified.
 
-| Type  | Size    | Description                                      |
-|-------|---------|--------------------------------------------------|
-| u8    | 1 byte  | Unsigned 8-bit integer                           |
-| u16   | 2 bytes | Unsigned 16-bit integer, little-endian           |
-| u32   | 4 bytes | Unsigned 32-bit integer, little-endian           |
-| u64   | 8 bytes | Unsigned 64-bit integer, little-endian           |
-| i32   | 4 bytes | Signed 32-bit integer, little-endian, two's complement |
-| f32   | 4 bytes | IEEE 754 single-precision float, little-endian   |
-| f64   | 8 bytes | IEEE 754 double-precision float, little-endian   |
-| str   | variable| u16 length prefix followed by length bytes of UTF-8 |
+|Type|Size    |Description                                           |
+|----|--------|------------------------------------------------------|
+|u8  |1 byte  |Unsigned 8-bit integer                                |
+|u16 |2 bytes |Unsigned 16-bit integer, little-endian                |
+|u32 |4 bytes |Unsigned 32-bit integer, little-endian                |
+|u64 |8 bytes |Unsigned 64-bit integer, little-endian                |
+|i32 |4 bytes |Signed 32-bit integer, little-endian, two's complement|
+|f32 |4 bytes |IEEE 754 single-precision float, little-endian        |
+|f64 |8 bytes |IEEE 754 double-precision float, little-endian        |
+|str |variable|u16 length prefix followed by length bytes of UTF-8   |
 
 String values MUST be valid UTF-8. String length prefix counts bytes not characters. Empty strings are encoded as a u16 value of 0 with no following bytes.
 
@@ -87,7 +90,7 @@ Readers encountering a string value that is not valid UTF-8 MUST throw MsfParseE
 
 An offset field value of 0x00000000 indicates that the referenced block is not present in the file. Readers MUST treat a null offset as absence of that block. Writers MUST set offset fields to 0 when the corresponding feature flag bit is not set.
 
----
+-----
 
 ## 3. Header
 
@@ -150,7 +153,7 @@ Readers MUST NOT reject a file solely because a feature flag bit is set that the
 
 Readers encountering a V1.0 file — where the file's minor version equals 0 — with any of bits 10–31 set MUST emit a warning identifying which reserved bits are set, as this indicates a non-conforming writer. Readers encountering a file whose minor version exceeds the reader's implemented minor version MUST NOT warn on reserved bits, as those bits may carry defined meaning in a later minor version the reader does not implement.
 
-Writers producing V1.0 files MUST mask the feature flags value to bits 0–9 before writing. Writers MUST NOT write a file with any of bits 10–31 set to 1. If a caller provides a feature flags value with reserved bits set, the writer MUST clear those bits silently and MUST emit a warning via the warning mechanism.
+Writers producing V1.0 files MUST mask the feature flags value to bits 0–9 before writing. Writers MUST NOT write a file with any of bits 10–31 set to 1. If a caller provides a feature flags value with reserved bits set, the writer MUST clear those bits and MUST emit a warning via the warning mechanism.
 
 Writers MUST set a feature flag bit if and only if the corresponding optional block is present in the file.
 
@@ -164,13 +167,13 @@ This field is in the header rather than the metadata block because readers may n
 
 ### 3.5 Block Offsets
 
-Offsets at positions 16–35 are absolute byte offsets from the beginning of the file to the start of each named block. A value of 0 indicates the block is not present. Any non-zero offset that points to a byte position at or beyond the value of the file_size field MUST be treated as an MsfParseException regardless of which block it references.
+Offsets at positions 16–35 are absolute byte offsets from the beginning of the file to the start of each named block. A value of 0 indicates the block is not present. A reader encountering any non-zero offset that points to a byte position at or beyond the value of the file_size field MUST throw MsfParseException regardless of which block it references.
 
 - **Metadata block offset** (16) — MUST NOT be 0. If a reader encounters 0 here it MUST throw MsfParseException immediately. All MSF files MUST contain a metadata block.
 - **Global palette offset** (20) — MUST NOT be 0. If a reader encounters 0 here it MUST throw MsfParseException immediately. All MSF files MUST contain a global palette block.
 - **Layer index offset** (24) — MUST NOT be 0. If a reader encounters 0 here it MUST throw MsfParseException immediately. All MSF files MUST contain a layer index block.
-- **Entity block offset** (28) — MUST be 0 if feature flag bit 0 is not set. If a reader encounters a non-zero value here while feature flag bit 0 is not set, it MUST emit a warning and MUST ignore the offset, treating the entity block as absent. The feature flag is authoritative for optional blocks. If a reader encounters a zero value here while feature flag bit 0 is set, it MUST emit a warning. The reader MAY continue without the entity block or MAY throw MsfParseException — the chosen behavior MUST be documented by the implementation.
-- **Block entity block offset** (32) — MUST be 0 if feature flag bit 1 is not set. The same rules that apply to the entity block offset apply to this field with respect to feature flag bit 1.
+- **Entity block offset** (28) — MUST be 0 if feature flag bit 0 is not set. If a reader encounters a non-zero value here while feature flag bit 0 is not set, it MUST emit a FEATURE_FLAG_CONFLICT warning and MUST ignore the offset, treating the entity block as absent. The feature flag is authoritative for optional blocks. If a reader encounters a zero value here while feature flag bit 0 is set, it MUST emit a FEATURE_FLAG_CONFLICT warning. The reader MAY continue without the entity block or MAY throw MsfParseException — the chosen behavior MUST be documented by the implementation. Writers MUST ensure the entity block offset is non-zero if and only if feature flag bit 0 is set. Writers MUST set the entity block offset to the correct absolute byte offset of the entity block before writing the header. Writing a non-zero feature flag bit 0 with a zero entity block offset, or a zero feature flag bit 0 with a non-zero entity block offset, constitutes a non-conforming write.
+- **Block entity block offset** (32) — MUST be 0 if feature flag bit 1 is not set. The same rules that apply to the entity block offset apply to this field with respect to feature flag bit 1, including the writer obligations for flag/offset consistency.
 
 ### 3.5.1 Warning Mechanism
 
@@ -180,15 +183,15 @@ In the Java reference implementation, MsfReader and MsfWriter MUST accept an opt
 
 Defined warning codes and the conditions that trigger them:
 
-| Code | Condition |
-|---|---|
-| `RESERVED_FLAG_SET` | Reader detected reserved bits set — feature flag bits 10–31 in a V1.0 file (Section 3.3), or rotation compatibility bits 5–7 (Section 10.3) |
-| `RESERVED_FLAG_CLEARED` | Writer cleared reserved bits provided by caller — applies to feature flags (Section 3.3) and rotation compatibility (Section 10.3) |
-| `FILE_SIZE_MISMATCH` | Actual file length does not match the file_size field (Section 3.6) |
-| `FILE_CHECKSUM_FAILURE` | File checksum verification failed (Section 11) |
-| `FEATURE_FLAG_CONFLICT` | Offset field state conflicts with the corresponding feature flag (Section 3.5) |
-| `OFFSET_BEYOND_FILE_SIZE` | A non-zero block offset is at or beyond the file_size value (Section 3.5) |
-| `DATA_VERSION_MISMATCH` | File MC data version differs from the currently active game version (Section 3.4) |
+|Code                     |Condition                                                                                                                                  |
+|-------------------------|-------------------------------------------------------------------------------------------------------------------------------------------|
+|`RESERVED_FLAG_SET`      |Reader detected reserved bits set — feature flag bits 10–31 in a V1.0 file (Section 3.3), or rotation compatibility bits 5–7 (Section 10.3)|
+|`RESERVED_FLAG_CLEARED`  |Writer cleared reserved bits provided by caller — applies to feature flags (Section 3.3) and rotation compatibility (Section 10.3)         |
+|`FILE_SIZE_MISMATCH`     |Actual file length does not match the file_size field (Section 3.6)                                                                        |
+|`FILE_CHECKSUM_FAILURE`  |File checksum verification failed (Section 11)                                                                                             |
+|`FEATURE_FLAG_CONFLICT`  |Offset field state conflicts with the corresponding feature flag (Section 3.5)                                                             |
+|`OFFSET_BEYOND_FILE_SIZE`|A non-zero block offset is at or beyond the file_size value (Section 3.5)                                                                  |
+|`DATA_VERSION_MISMATCH`  |File MC data version differs from the currently active game version (Section 3.4)                                                          |
 
 A file size mismatch warning and a subsequent file checksum failure warning MUST be linked — the FILE_CHECKSUM_FAILURE warning message MUST note that the result is unreliable due to the prior FILE_SIZE_MISMATCH.
 
@@ -198,7 +201,7 @@ The file size field (offset 36) is a u32 containing the total byte length of the
 
 The u32 field imposes a maximum MSF file size of 4,294,967,295 bytes (approximately 4 GiB). Writers producing files that would exceed this size MUST throw MsfException before beginning file output. This is a V1 format constraint.
 
-Readers SHOULD verify that the actual file size matches this field and SHOULD emit a FILE_SIZE_MISMATCH warning on mismatch. A mismatch indicates a truncated or corrupted file. When a file size mismatch warning has been emitted, any subsequent file checksum failure warning MUST note that the checksum result is unreliable due to the size mismatch, since the byte range input to the hash computation is undefined.
+Readers SHOULD verify that the actual file size matches this field and SHOULD emit a FILE_SIZE_MISMATCH warning on mismatch. A mismatch indicates a truncated or corrupted file. When a file size mismatch warning has been emitted, any subsequent file checksum failure warning MUST note that the checksum result is unreliable due to the size mismatch, since the byte range input to the hash computation is defined by the file_size field which is known to be incorrect.
 
 ### 3.7 Header Checksum
 
@@ -214,9 +217,9 @@ The header checksum (offset 40) is a u64 containing the xxHash3-64 digest, with 
 
 No header field value other than the magic bytes and checksum MAY be used to make any parsing decision until all three validation steps have passed. A reader that acts on the major version, feature flags, or any offset field before the header checksum is verified is non-conforming.
 
-A header checksum mismatch MUST be treated as an MsfChecksumException and parsing MUST stop immediately. The header checksum covers only the header. A separate file checksum covers the full file contents and is stored at the end of the file.
+A header checksum mismatch MUST cause the reader to throw MsfChecksumException and parsing MUST stop immediately. The header checksum covers only the header. A separate file checksum covers the full file contents and is stored at the end of the file.
 
----
+-----
 
 ## 4. Global Palette Block
 
@@ -235,6 +238,7 @@ Offset  Size    Type    Field
 ### 4.2 Palette Entry Format
 
 Each palette entry is:
+
 ```
 u16     Blockstate string byte length
 u8[]    Blockstate string (UTF-8, not null terminated)
@@ -244,11 +248,12 @@ u8[]    Blockstate string (UTF-8, not null terminated)
 
 **Palette ID 0 MUST be AIR.** The string value of palette entry 0 MUST be `minecraft:air`. This is a format invariant. Writers MUST always write `minecraft:air` as the first palette entry regardless of whether air appears in the block data. Readers MUST treat palette ID 0 as air without reading the string value.
 
-**Palette entries MUST be deduplicated.** No two entries in the palette may represent the same blockstate. Writers MUST check for duplicates before writing. Readers encountering duplicate palette entries MUST throw MsfParseException. A duplicate palette entry indicates a non-conforming writer and the palette cannot be trusted to correctly map block IDs to blockstate strings. Silent deduplication is not permitted.
+**Palette entries MUST be deduplicated.** No two entries in the palette may represent the same blockstate. Writers MUST check for duplicates before writing and MUST throw MsfPaletteException if the input contains duplicate blockstate strings, identifying the duplicated string. Readers encountering duplicate palette entries MUST throw MsfParseException. A duplicate palette entry indicates a non-conforming writer and the palette cannot be trusted to correctly map block IDs to blockstate strings. Silent deduplication by readers is not permitted.
 
 **Blockstate property ordering MUST follow canonical Minecraft ordering.** Properties within a blockstate string MUST appear in the order they are registered in Minecraft's BlockStateDefinition for that block as of the MC data version declared in the header. Implementations MUST NOT reorder properties alphabetically or by any other scheme.
 
 Example of canonical ordering for oak stairs:
+
 ```
 minecraft:oak_stairs[facing=north,half=bottom,shape=straight,waterlogged=false]
 ```
@@ -277,7 +282,7 @@ Writers MUST include all properties explicitly. Writers MUST NOT omit properties
 
 Throughout this specification, a **palette ID** refers to a zero-indexed u16 value identifying an entry in the global palette. Palette ID 0 always refers to `minecraft:air`.
 
----
+-----
 
 ## 5. Metadata Block
 
@@ -336,7 +341,7 @@ The placement metadata fields follow immediately after the thumbnail bytes. Sect
 
 **Tags** are freeform UTF-8 strings. No controlled vocabulary is defined in V1. Tags are case-sensitive.
 
----
+-----
 
 ## 6. Layer Index Block
 
@@ -387,7 +392,7 @@ Readers encountering bits 2–7 set in any layer flags field MUST NOT reject the
 
 **Region count** per layer is a u8. The minimum region count per layer is 1. The maximum region count per layer is 255. A layer with zero regions is invalid. Writers MUST NOT produce a layer with a region count of 0. Writers given more than 255 regions for a single layer MUST throw IllegalArgumentException identifying the field name, the count provided, and the maximum permitted value of 255. Readers encountering a layer with a region count of 0 MUST throw MsfParseException.
 
----
+-----
 
 ## 7. Region Data
 
@@ -411,7 +416,7 @@ u8[]    Compressed region payload
 
 Size X, Size Y, and Size Z MUST each be at least 1. A region with a size of 0 on any axis is invalid and produces a block count of zero which is meaningless. Writers MUST NOT produce a region where any size field is 0. Readers encountering a region where any size field is 0 MUST throw MsfParseException before attempting to decompress or parse the region payload.
 
-The compressed data length field contains the byte length of the compressed region payload that follows immediately in the file. Writers MUST set this field to the exact byte length of the compressed payload. Readers MUST use this field to locate the end of the compressed payload and to bound how many bytes are consumed from the file stream. An incorrect compressed data length will misalign all subsequent file parsing — this field has the same structural significance as the packed array length field in Section 7.5.
+The compressed data length field contains the byte length of the compressed region payload that follows immediately in the file. Writers MUST set this field to the exact byte length of the compressed payload. Readers MUST use this field to locate the end of the compressed payload and to bound how many bytes are consumed from the file stream. Readers MUST throw MsfParseException if the number of bytes consumed from the stream for the compressed payload does not match this field — an incorrect compressed data length will misalign all subsequent file parsing. This field has the same structural significance as the packed array length field in Section 7.5.
 
 The uncompressed data length field contains the expected byte length of the payload after decompression. Writers MUST set this field to the exact byte length of the uncompressed payload. Readers SHOULD verify that the decompressed output byte length matches this field and MUST throw MsfParseException if a mismatch is detected.
 
@@ -426,7 +431,7 @@ The uncompressed data length field contains the expected byte length of the payl
 
 Writers SHOULD use zstd compression. Readers MUST support all four compression types.
 
-Compression type values 0x04 through 0xFF are reserved. Readers encountering an unrecognized compression type value MUST throw MsfParseException. Readers MUST NOT attempt to interpret a region payload whose compression type is unrecognized — there is no safe fallback behavior for an undecompressable payload. Future minor versions MAY define additional compression type values. A reader that does not implement a compression type defined in a later minor version MUST still throw MsfParseException on encountering it, as the payload cannot be safely decoded regardless of minor version.
+Compression type values 0x04 through 0xFF are reserved. Readers encountering an unrecognized compression type value MUST throw MsfParseException. Readers MUST NOT attempt to interpret a region payload whose compression type is unrecognized — there is no safe fallback behavior for an undecompressible payload. Future minor versions MAY define additional compression type values. A reader that does not implement a compression type defined in a later minor version MUST still throw MsfParseException on encountering it, as the payload cannot be safely decoded regardless of minor version.
 
 ### 7.3 Region Payload
 
@@ -471,7 +476,7 @@ Palette IDs are packed into u64 words. The number of bits used per entry is:
 bits_per_entry = max(1, ceil(log2(palette_entry_count)))
 ```
 
-This formula is defined only for palette_entry_count ≥ 1. Since palette entry 0 (minecraft:air) is always present per Section 4.3, the minimum palette entry count referenced by any region is 1. A region payload with a palette_entry_count of 0 is invalid and MUST NOT be produced by writers. Readers encountering bits_per_entry = 0 MUST throw MsfParseException.
+This formula is defined only for palette_entry_count ≥ 1. Since palette entry 0 (minecraft:air) is always present per Section 4.3, the minimum palette entry count referenced by any region is 1. A region payload with a palette entry count of 0 is invalid and MUST NOT be produced by writers. Readers encountering bits_per_entry = 0 MUST throw MsfParseException.
 
 Writers MUST store the actual bits_per_entry value explicitly. Readers MUST use the stored bits_per_entry value and MUST NOT derive it independently.
 
@@ -481,7 +486,7 @@ The packed array length field MUST equal:
 packed_array_length = ceil((size_x * size_y * size_z * bits_per_entry) / 64)
 ```
 
-Writers MUST perform this computation using integer arithmetic of sufficient width to avoid overflow. In Java, all dimension values MUST be widened to `long` before multiplication — computing `(long) size_x * size_y * size_z * bits_per_entry` in `int` arithmetic will silently overflow for large regions. The result MUST fit in a u32 field. Writers MUST throw MsfException if the computed packed array length exceeds 4,294,967,295.
+Writers MUST perform this computation using integer arithmetic of sufficient width to avoid overflow. In Java, all dimension and bits-per-entry values MUST be widened to `long` before multiplication — multiplying these values in `int` arithmetic will silently overflow for large regions. The result MUST fit in a u32 field. Writers MUST throw MsfException if the computed packed array length exceeds 4,294,967,295.
 
 Writers MUST compute and store this value correctly. Readers SHOULD verify that the stored packed array length matches the value derived from the region dimensions and bits_per_entry. If a mismatch is detected, readers MUST throw MsfParseException — a wrong packed array length would cause the reader to consume the wrong number of bytes, misaligning all subsequent parsing. Readers MUST also perform this verification using arithmetic of sufficient width to avoid overflow. In Java, all dimension values MUST be widened to `long` before multiplication when computing the expected packed array length for verification.
 
@@ -515,7 +520,7 @@ Packed biome data values MUST be valid biome palette IDs — each value MUST be 
 
 All region coordinates are relative to the schematic anchor point declared in the placement metadata (see Section 10). Coordinates use Minecraft's standard axis orientation: X increases east, Y increases up, Z increases south.
 
----
+-----
 
 ## 8. Entity Block
 
@@ -539,15 +544,17 @@ u32     Entity count
 
 ### 8.2 Normative Requirements
 
-**Position and type MUST be stored in typed fields** and MUST NOT be duplicated in the NBT payload. The NBT payload contains only entity-specific data that is not captured by typed fields.
+**Position and type MUST be stored in typed fields** and MUST NOT be duplicated in the NBT payload. The NBT payload contains only entity-specific data that is not captured by typed fields. The entity type in Minecraft NBT is stored as the `id` tag. Writers MUST NOT include the `id` tag in the NBT payload, as the entity type is already captured in the typed entity type field.
 
-**UUIDs MUST be stripped from all entities** before writing. Writers MUST NOT include UUID data in the NBT payload. Readers generating entities on paste MUST assign new UUIDs. This requirement prevents UUID collisions when the same schematic is pasted multiple times.
+**UUIDs MUST be stripped from all entities** before writing. Writers MUST NOT include UUID data in the NBT payload. Writers MUST strip the entity's own UUID from the NBT payload before writing. UUIDs are stored as an `int[4]` tag named `UUID` in Minecraft 1.16 and later, and as `long` tags named `UUIDMost` and `UUIDLeast` in earlier versions. Writers MUST handle both representations. Owner UUIDs and other relational UUID references stored in entity NBT SHOULD also be stripped, as these references will be invalid in a new world context. Readers generating entities on paste MUST assign a new UUID to the entity itself. Restoring owner UUIDs and relational references is a tool concern beyond the scope of this specification. This requirement prevents UUID collisions when the same schematic is pasted multiple times.
 
 **Entity count MUST be at least 1.** Writers MUST NOT write an entity block with an entity count of 0. If a writer has no entities to write, it MUST NOT set feature flag bit 0 and MUST NOT write an entity block. Readers encountering an entity block with an entity count of 0 MUST emit a FEATURE_FLAG_CONFLICT warning and MUST continue parsing — this indicates a non-conforming writer.
 
 **Entity count is a u32.** No maximum below the u32 ceiling is imposed by this field. The effective maximum number of entities is bounded by the u32 block length field, which limits the entity block to 4,294,967,295 bytes total. Writers MUST NOT produce an entity block whose total byte length exceeds this limit, consistent with Section 3.6.
 
----
+**NBT payload size limit.** The NBT payload for a single entity MUST NOT exceed 65535 bytes after UUID stripping and exclusion of typed fields. Writers MUST throw IllegalArgumentException identifying the entity type, the payload size computed, and the maximum permitted value of 65535, if the stripped NBT payload for any entity exceeds this limit. Silent truncation is not permitted.
+
+-----
 
 ## 9. Block Entity Block
 
@@ -564,20 +571,22 @@ u32     Block entity count
   i32   Position Z (relative to anchor)
   str   Block entity type (e.g. "minecraft:chest")
   u16   NBT payload length
-  u8[]  NBT payload (excludes position and id)
+  u8[]  NBT payload (excludes position and block entity type — stored in the id NBT tag)
 ```
 
 ### 9.2 Normative Requirements
 
-**Position and type MUST be stored in typed fields** and MUST NOT be duplicated in the NBT payload.
+**Position and type MUST be stored in typed fields** and MUST NOT be duplicated in the NBT payload. The block entity type in Minecraft NBT is stored as the `id` tag. Writers MUST NOT include the `id` tag in the NBT payload, as the block entity type is already captured in the typed block entity type field. Position coordinates are similarly excluded — writers MUST NOT include `x`, `y`, or `z` position tags in the NBT payload.
 
-**UUIDs MUST be stripped** from block entity NBT payloads. The same UUID policy that applies to entities applies to block entities.
+**UUIDs MUST be stripped** from block entity NBT payloads. Writers MUST strip UUIDs from block entity NBT payloads before writing, handling both the `int[4]` tag named `UUID` used in Minecraft 1.16 and later and the `long` tags named `UUIDMost` and `UUIDLeast` used in earlier versions. Readers generating block entities on paste MUST NOT preserve any UUID data from the payload. The rationale and full scoping of this requirement are stated in Section 8.2.
 
 **Block entity count MUST be at least 1.** Writers MUST NOT write a block entity block with a block entity count of 0. If a writer has no block entities to write, it MUST NOT set feature flag bit 1 and MUST NOT write a block entity block. Readers encountering a block entity block with a block entity count of 0 MUST emit a FEATURE_FLAG_CONFLICT warning and MUST continue parsing — this indicates a non-conforming writer.
 
 **Block entity count is a u32.** No maximum below the u32 ceiling is imposed by this field. The effective maximum number of block entities is bounded by the u32 block length field, which limits the block entity block to 4,294,967,295 bytes total. Writers MUST NOT produce a block entity block whose total byte length exceeds this limit, consistent with Section 3.6.
 
----
+**NBT payload size limit.** The NBT payload for a single block entity MUST NOT exceed 65535 bytes after UUID stripping and exclusion of typed fields. Writers MUST throw IllegalArgumentException identifying the block entity type, the payload size computed, and the maximum permitted value of 65535, if the stripped NBT payload for any block entity exceeds this limit. Silent truncation is not permitted.
+
+-----
 
 ## 10. Placement Metadata
 
@@ -627,25 +636,25 @@ Tools SHOULD warn the user when a requested transformation is not declared valid
 
 **Bounding box** is the minimum axis-aligned box enclosing all non-air blocks. It is derived by readers and MUST NOT be stored explicitly.
 
-**Functional volume** is an optional author-declared region that must be unobstructed for the schematic to function correctly. It may extend beyond the bounding box. Its presence is indicated by the has functional volume u8 field in the metadata block layout — a value of 0x01 indicates the six i32 coordinate fields follow; a value of 0x00 indicates they are absent. Any value other than 0x00 or 0x01 is invalid and MUST be treated as MsfParseException.
+**Functional volume** is an optional author-declared region that must be unobstructed for the schematic to function correctly. It may extend beyond the bounding box. Its presence is indicated by the has functional volume u8 field in the metadata block layout — a value of 0x01 indicates the six i32 coordinate fields follow; a value of 0x00 indicates they are absent. Any value other than 0x00 or 0x01 is invalid and readers MUST throw MsfParseException.
 
 Functional volume coordinates are relative to the anchor point. The min values MUST be less than or equal to the corresponding max values on each axis. Writers MUST NOT produce a functional volume where any min coordinate exceeds the corresponding max coordinate.
 
 Tools SHOULD check the functional volume for obstructions before placement and SHOULD warn the user if obstructions are found.
 
----
+-----
 
 ## 11. File Checksum
 
 The final 8 bytes of every MSF file are a u64 xxHash3-64 digest, with seed value 0, of all file bytes from offset 0 to offset (file_size - 9) inclusive — equivalently, all bytes except the final 8.
 
-**Write procedure:** Writers MUST compute this digest after all other file content has been written, including the fully populated header with the file_size field set to total content length plus 8. Writers MUST append the digest as a u64 little-endian value as the absolute final write operation before closing the file.
+**Write procedure:** Writers MUST compute this digest after all other file content has been written, including the fully populated header with the file_size field set to total content length plus 8. The file checksum covers all 48 header bytes including the header checksum at offsets 40–47. Writers MUST therefore compute and write the header checksum before computing the file checksum. The correct write sequence is: write all content blocks, set the file_size field, compute and write the header checksum, then compute and write the file checksum as the absolute final write operation before closing the file.
 
-**Read procedure:** Readers MUST verify the file checksum after verifying the header checksum. A file checksum failure is a mandatory warning and a permitted stop — it is NOT a mandatory stop. Readers MUST emit a FILE_CHECKSUM_FAILURE warning via the warning mechanism when file checksum verification fails. Readers MUST NOT silently ignore a file checksum failure. The reference Java implementation MUST throw MsfChecksumException by default on file checksum failure, while providing a reader configuration option that allows callers to continue past file checksum failure at their explicit request.
+**Read procedure:** Readers MUST verify the file checksum after verifying the header checksum. Readers MUST use the value of the file_size header field, not the actual file length, as the upper bound when computing the verification checksum — the input range is bytes 0 through (file_size - 9) inclusive. A file checksum failure is a mandatory warning and a permitted stop — it is NOT a mandatory stop. Readers MUST emit a FILE_CHECKSUM_FAILURE warning via the warning mechanism when file checksum verification fails. Readers MUST NOT silently ignore a file checksum failure. The reference Java implementation MUST throw MsfChecksumException by default on file checksum failure, while providing a reader configuration option that allows callers to continue past file checksum failure at their explicit request.
 
-If a FILE_SIZE_MISMATCH warning was emitted during the same read operation, the FILE_CHECKSUM_FAILURE warning message MUST note that the checksum result is unreliable due to the size mismatch, since the byte range input to the hash computation is undefined when the file size field is wrong.
+If a FILE_SIZE_MISMATCH warning was emitted during the same read operation, the FILE_CHECKSUM_FAILURE warning message MUST note that the checksum result is unreliable due to the size mismatch, since the byte range input to the hash computation is defined by the file_size field which is known to be incorrect.
 
----
+-----
 
 ## 12. Versioning Contract
 
@@ -682,11 +691,13 @@ The minor version field indicates what features the writer used. It does not gat
 Rejection criteria are divided into two tiers:
 
 **Mandatory rejection — reader MUST stop and MUST NOT return partial data:**
+
 - Magic bytes do not match `MSF!`
 - Header checksum fails
 - Major version is not supported
 
 **Permitted rejection — reader MUST warn, MAY stop:**
+
 - File checksum fails
 
 A reader MUST NOT add additional mandatory rejection criteria. A reader that stops on file checksum failure MUST do so only after emitting the appropriate warning and only if not configured by the caller to continue.
@@ -716,47 +727,50 @@ The block length field counts the number of bytes following that field to the en
 
 Writers producing new block types in future minor versions MUST include a block length prefix. A block type without a length prefix is a breaking change and violates this specification regardless of minor version.
 
----
+-----
 
 ## Appendix A — Implementer Compatibility Guarantee
 
 This appendix summarizes the practical commitments this specification makes to implementers in plain language.
 
 **If you implement MSF today:**
+
 - Your reader will never encounter a V1 file it cannot at least partially read
 - Your writer will never produce a file that becomes invalid due to spec changes
 - Fields you write today will mean the same thing in every future V1 reader
 - Features you implement will never be removed from the format
 
 **If a future minor version adds a feature you haven't implemented:**
+
 - Your reader skips the new block via its length prefix
 - Your reader continues reading everything it understands
 - Your reader does not need to be updated to remain correct
 - You may optionally update to support the new feature when it suits your timeline
 
 **The only things that will ever require a reader update:**
+
 - A major version increment — which represents an architectural emergency not a routine upgrade
 - A new Minecraft data version — which is a Minecraft concern not an MSF concern
 
----
+-----
 
 ## Appendix B — Summary of All Block Types
 
-| Block               | Required | Feature Flag | Offset Field              |
-|---------------------|----------|--------------|---------------------------|
-| Metadata            | Yes      | —            | Metadata block offset     |
-| Global Palette      | Yes      | —            | Global palette offset     |
-| Layer Index         | Yes      | —            | Layer index offset        |
-| Entity Block        | No       | Bit 0        | Entity block offset       |
-| Block Entity Block  | No       | Bit 1        | Block entity block offset |
+|Block             |Required|Feature Flag|Offset Field             |
+|------------------|--------|------------|-------------------------|
+|Metadata          |Yes     |—           |Metadata block offset    |
+|Global Palette    |Yes     |—           |Global palette offset    |
+|Layer Index       |Yes     |—           |Layer index offset       |
+|Entity Block      |No      |Bit 0       |Entity block offset      |
+|Block Entity Block|No      |Bit 1       |Block entity block offset|
 
----
+-----
 
 ## Appendix C — Canonical Minecraft Ordering Reference
 
 Blockstate property ordering follows the registration order in Minecraft's BlockStateDefinition as of the MC data version declared in the header. Implementations targeting a specific MC data version SHOULD derive property ordering from that version's game data directly rather than hardcoding property lists, as property sets may change between Minecraft releases.
 
----
+-----
 
 ## Appendix D — xxHash3 Reference
 
@@ -764,7 +778,7 @@ xxHash3 is used for both the header checksum and the file checksum. The canonica
 
 The seed value for all xxHash3 computations in MSF is **0** (default seed).
 
----
+-----
 
 ## Appendix E — Unsigned Integer Handling in Java
 
@@ -776,7 +790,7 @@ Java does not have native unsigned integer types. Implementations MUST handle th
 
 **Write-side range validation:** Writers MUST validate all values before encoding them into unsigned fields. If a value exceeds the maximum representable value for the target field's unsigned type, the writer MUST throw `IllegalArgumentException` with a message identifying the field name, the value provided, and the maximum permitted value. Silent truncation and value clamping are not permitted under any circumstance.
 
----
+-----
 
 ## Appendix F — Deprecation Policy
 
