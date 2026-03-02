@@ -1,75 +1,75 @@
 package dev.msf.core;
 
 /**
- * Thrown when an MSF checksum verification fails.
+ * Thrown when a checksum verification fails during MSF parsing.
  *
- * <p>MSF uses xxHash3 checksums in two places:
+ * <p>Two checksums are defined by the MSF format:
  * <ul>
- *   <li><b>Header checksum</b> — covers bytes 0–39 of the header. Verified first, before any
- *       other header field is trusted. A failure here indicates header corruption and the reader
- *       MUST stop immediately.</li>
- *   <li><b>File checksum</b> — covers all file bytes except the final 8 bytes. A failure here
- *       indicates data corruption. Readers MUST warn the user and MAY offer to continue at the
- *       user's explicit request.</li>
+ *   <li>Header checksum — xxHash3-64 of header bytes 0–39, stored at offsets 40–47.
+ *       A mismatch here is always a mandatory stop (Section 3.7).</li>
+ *   <li>File checksum — xxHash3-64 of all bytes except the final 8, appended at end of file.
+ *       A mismatch here is a mandatory warning and a permitted stop (Section 11).</li>
  * </ul>
  *
- * @see dev.msf.core.checksum.XxHash3
+ * @see MsfSpec Section 3.7 — header checksum
+ * @see MsfSpec Section 11 — file checksum
  */
 public class MsfChecksumException extends MsfException {
 
-    /** Whether this failure is in the header checksum ({@code true}) or file checksum ({@code false}). */
-    private final boolean headerChecksum;
+    /** Identifies which checksum failed. */
+    public enum ChecksumType {
+        /** The header checksum covering bytes 0–39 failed. */
+        HEADER,
+        /** The file checksum covering all bytes except the final 8 failed. */
+        FILE
+    }
 
-    /** The checksum value computed from the actual data. */
-    private final long computed;
-
-    /** The checksum value stored in the file. */
-    private final long stored;
+    private final ChecksumType checksumType;
+    private final long expected;
+    private final long actual;
 
     /**
-     * Constructs an {@code MsfChecksumException}.
+     * Creates a new {@code MsfChecksumException}.
      *
-     * @param headerChecksum {@code true} if the header checksum failed, {@code false} if the
-     *                       file checksum failed
-     * @param computed       the xxHash3 value computed from the data
-     * @param stored         the xxHash3 value stored in the file
+     * @param checksumType which checksum failed
+     * @param expected     the digest value stored in the file
+     * @param actual       the digest value computed by the reader
      */
-    public MsfChecksumException(boolean headerChecksum, long computed, long stored) {
+    public MsfChecksumException(ChecksumType checksumType, long expected, long actual) {
         super(String.format(
-            "%s checksum mismatch — computed 0x%016X, stored 0x%016X",
-            headerChecksum ? "Header" : "File",
-            computed, stored
+            "%s checksum mismatch — stored: 0x%016X, computed: 0x%016X",
+            checksumType == ChecksumType.HEADER ? "Header" : "File",
+            expected, actual
         ));
-        this.headerChecksum = headerChecksum;
-        this.computed = computed;
-        this.stored = stored;
+        this.checksumType = checksumType;
+        this.expected = expected;
+        this.actual = actual;
     }
 
     /**
-     * Returns {@code true} if this exception was caused by a header checksum failure.
-     * Returns {@code false} if it was caused by a file checksum failure.
+     * Returns which checksum failed.
      *
-     * @return {@code true} for header checksum failure, {@code false} for file checksum failure
+     * @return the checksum type that triggered this exception
      */
-    public boolean isHeaderChecksum() {
-        return headerChecksum;
+    public ChecksumType getChecksumType() {
+        return checksumType;
     }
 
     /**
-     * Returns the xxHash3 digest computed from the actual file bytes.
+     * Returns the digest value stored in the file.
      *
-     * @return the computed checksum value
+     * @return the expected (stored) digest as a signed long (interpret as unsigned)
      */
-    public long getComputed() {
-        return computed;
+    public long getExpected() {
+        return expected;
     }
 
     /**
-     * Returns the xxHash3 digest stored in the file.
+     * Returns the digest value computed by the reader.
      *
-     * @return the stored checksum value
+     * @return the actual (computed) digest as a signed long (interpret as unsigned)
      */
-    public long getStored() {
-        return stored;
+    public long getActual() {
+        return actual;
     }
 }

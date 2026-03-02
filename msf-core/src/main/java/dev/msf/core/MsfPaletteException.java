@@ -1,37 +1,33 @@
 package dev.msf.core;
 
 /**
- * Thrown when a palette encoding or lookup operation fails.
+ * Thrown when a palette encoding or lookup error occurs.
  *
- * <p>Examples of conditions that produce this exception:
- * <ul>
- *   <li>Palette ID 0 does not map to {@code minecraft:air} (format invariant violation)</li>
- *   <li>A block data array references a palette ID that does not exist in the palette</li>
- *   <li>Duplicate blockstate strings are detected during write</li>
- *   <li>The palette exceeds the maximum of 65535 entries</li>
- *   <li>A blockstate string is not valid UTF-8</li>
- * </ul>
+ * <p>Examples include: duplicate palette entries, invalid blockstate strings,
+ * out-of-range palette IDs in block data, and palette entry counts that exceed
+ * the u16 maximum of 65535.
  *
- * <p>See MSF Spec Section 4.3 — palette normative requirements.
+ * @see MsfSpec Section 4.3 — normative palette requirements
+ * @see MsfSpec Section 7.5 — palette ID validation in block data
  */
 public class MsfPaletteException extends MsfException {
 
     /**
-     * Constructs an {@code MsfPaletteException} with the specified detail message.
+     * Creates a new {@code MsfPaletteException} with the given message.
      *
-     * @param message the detail message describing the palette error
+     * @param message human-readable description of the palette error
      */
-    public MsfPaletteException(@NotNull String message) {
+    public MsfPaletteException(String message) {
         super(message);
     }
 
     /**
-     * Constructs an {@code MsfPaletteException} with a detail message and cause.
+     * Creates a new {@code MsfPaletteException} with the given message and cause.
      *
-     * @param message the detail message
-     * @param cause   the underlying cause
+     * @param message human-readable description of the palette error
+     * @param cause   the underlying exception that triggered this error
      */
-    public MsfPaletteException(@NotNull String message, @NotNull Throwable cause) {
+    public MsfPaletteException(String message, Throwable cause) {
         super(message, cause);
     }
 }

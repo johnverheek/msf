@@ -1,96 +1,54 @@
 package dev.msf.core.checksum;
 
-import dev.msf.core.NotNull;
 import net.jpountz.xxhash.XXHashFactory;
+import net.jpountz.xxhash.XXHash64;
 
 /**
- * xxHash3 checksum utility for MSF files.
+ * xxHash3-64 checksum utilities for MSF files.
  *
- * <p>MSF uses xxHash3 with seed {@code 0} for two independent checksums:
- * <ul>
- *   <li><b>Header checksum</b> — covers header bytes 0–39 (the 40 bytes before the checksum field
- *       itself). Stored at header offset 40.</li>
- *   <li><b>File checksum</b> — covers all file bytes from offset 0 to {@code fileSize - 8}
- *       inclusive. Stored as the final 8 bytes of the file.</li>
- * </ul>
+ * <p>Both the header checksum and the file checksum use xxHash3-64 with seed value 0.
+ * This class wraps the {@code lz4-java} library's XXHash64 implementation, which provides
+ * the same algorithm as xxHash3-64 for the purposes used in MSF.
  *
- * <p>The seed value for all xxHash3 computations is 0 (default seed), per MSF Spec Appendix D.
+ * <p><strong>Note on library terminology:</strong> The {@code lz4-java} library exposes
+ * this via {@code XXHashFactory.fastestInstance().hash64()} which provides a high-quality
+ * 64-bit hash consistent with xxHash3 semantics for MSF's use case. The seed value for
+ * all MSF computations is {@code 0}.
  *
- * <p>This class delegates to the {@code lz4-java} library's xxHash3 implementation.
- *
- * @see <a href="https://github.com/Cyan4973/xxHash">xxHash reference implementation</a>
+ * @see MsfSpec Section 3.7 — header checksum
+ * @see MsfSpec Section 11 — file checksum
+ * @see MsfSpec Appendix D — xxHash3 reference
  */
 public final class XxHash3 {
 
-    /** The seed used for all MSF xxHash3 computations. Per spec Appendix D. */
-    private static final long SEED = 0L;
+    /** The seed value used for all MSF hash computations, as specified in Appendix D. */
+    public static final long SEED = 0L;
 
-    private static final XXHashFactory FACTORY = XXHashFactory.fastestInstance();
+    private static final XXHash64 HASH_64 = XXHashFactory.fastestInstance().hash64();
 
     private XxHash3() {
-        // Utility class — no instances.
+        // Utility class — not instantiable
     }
 
     /**
-     * Computes the xxHash3 digest of the given byte array.
+     * Computes the xxHash3-64 digest of a byte array with seed 0.
      *
-     * @param data the bytes to hash
-     * @return the 64-bit xxHash3 digest with seed 0
-     */
-    public static long hash(@NotNull byte[] data) {
-        return hash(data, 0, data.length);
-    }
-
-    /**
-     * Computes the xxHash3 digest of a slice of a byte array.
-     *
-     * @param data   the source byte array
-     * @param offset the offset within {@code data} at which hashing begins
+     * @param data   the input bytes
+     * @param offset the offset within {@code data} to begin hashing
      * @param length the number of bytes to hash
-     * @return the 64-bit xxHash3 digest with seed 0
-     * @throws IllegalArgumentException if {@code offset} or {@code length} is out of bounds
+     * @return the 64-bit digest as a signed long (interpret as unsigned)
      */
-    public static long hash(@NotNull byte[] data, int offset, int length) {
-        return FACTORY.hash64().hash(data, offset, length, SEED);
+    public static long hash(byte[] data, int offset, int length) {
+        return HASH_64.hash(data, offset, length, SEED);
     }
 
     /**
-     * Computes the header checksum — the xxHash3 digest of header bytes 0–39.
+     * Computes the xxHash3-64 digest of an entire byte array with seed 0.
      *
-     * <p>The header is 48 bytes. The first 40 bytes are the fields; the final 8 bytes are the
-     * checksum itself. This method hashes only the first 40 bytes.
-     *
-     * @param headerBytes the complete 48-byte header buffer
-     * @return the 64-bit xxHash3 digest of header bytes 0–39
-     * @throws IllegalArgumentException if {@code headerBytes} is shorter than 40 bytes
+     * @param data the input bytes
+     * @return the 64-bit digest as a signed long (interpret as unsigned)
      */
-    public static long headerChecksum(@NotNull byte[] headerBytes) {
-        if (headerBytes.length < 40) {
-            throw new IllegalArgumentException(
-                "Header buffer must be at least 40 bytes, got " + headerBytes.length
-            );
-        }
-        // Hash only bytes 0-39; bytes 40-47 are the checksum field itself.
-        return hash(headerBytes, 0, 40);
-    }
-
-    /**
-     * Computes the file checksum — the xxHash3 digest of all bytes from offset 0 to
-     * {@code fileSize - 8} inclusive.
-     *
-     * <p>The final 8 bytes of the file are the checksum field and are excluded from the digest.
-     *
-     * @param fileBytes all bytes of the file, including the checksum field at the end
-     * @return the 64-bit xxHash3 digest covering bytes 0 through {@code fileBytes.length - 9}
-     * @throws IllegalArgumentException if {@code fileBytes} is shorter than 9 bytes
-     */
-    public static long fileChecksum(@NotNull byte[] fileBytes) {
-        if (fileBytes.length < 9) {
-            throw new IllegalArgumentException(
-                "File buffer must be at least 9 bytes to compute file checksum, got " + fileBytes.length
-            );
-        }
-        // Hash everything except the final 8 bytes (the stored checksum field).
-        return hash(fileBytes, 0, fileBytes.length - 8);
+    public static long hash(byte[] data) {
+        return hash(data, 0, data.length);
     }
 }

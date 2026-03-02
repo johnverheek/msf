@@ -3,51 +3,51 @@ package dev.msf.core;
 /**
  * Thrown when an MSF file declares a major version that this reader does not support.
  *
- * <p>Minor version differences MUST NOT produce this exception. Per MSF Spec Section 3.2,
- * a V1 reader must attempt to read any V1 file regardless of minor version. This exception
- * is reserved exclusively for major version mismatches (e.g. a V2 file read by a V1 reader).
+ * <p>Per spec Section 3.2, a reader implementing V1 MUST throw this exception when the
+ * major version field contains any value other than 1, including 0. The exception message
+ * MUST include both the major version found in the file and the major version supported
+ * by the reader. No partial read result is valid when this exception is thrown.
  *
- * <p>When thrown, the reader MUST stop immediately and MUST NOT attempt to read further.
- * See MSF Spec Section 12.3 — reader failure precedence.
+ * @see MsfSpec Section 3.2 — version fields
  */
 public class MsfVersionException extends MsfException {
 
-    /** The major version declared in the file that triggered this exception. */
-    private final int fileMajorVersion;
+    /** The major version found in the file. */
+    private final int foundVersion;
 
-    /** The maximum major version this reader supports. */
-    private final int supportedMajorVersion;
+    /** The major version supported by this reader. */
+    private final int supportedVersion;
 
     /**
-     * Constructs an {@code MsfVersionException}.
+     * Creates a new {@code MsfVersionException}.
      *
-     * @param fileMajorVersion      the major version declared in the MSF file
-     * @param supportedMajorVersion the major version this reader supports
+     * @param foundVersion     the major version declared in the file header
+     * @param supportedVersion the major version this reader supports
      */
-    public MsfVersionException(int fileMajorVersion, int supportedMajorVersion) {
+    public MsfVersionException(int foundVersion, int supportedVersion) {
         super(String.format(
-            "Unsupported MSF major version %d (this reader supports major version %d)",
-            fileMajorVersion, supportedMajorVersion
+            "Unsupported MSF major version %d — this reader supports major version %d only",
+            foundVersion, supportedVersion
         ));
-        this.fileMajorVersion = fileMajorVersion;
-        this.supportedMajorVersion = supportedMajorVersion;
+        this.foundVersion = foundVersion;
+        this.supportedVersion = supportedVersion;
     }
 
     /**
-     * Returns the major version declared in the MSF file that triggered this exception.
+     * Returns the major version declared in the file header.
      *
-     * @return the file's major version
+     * @return the major version found in the file
      */
-    public int getFileMajorVersion() {
-        return fileMajorVersion;
+    public int getFoundVersion() {
+        return foundVersion;
     }
 
     /**
-     * Returns the maximum major version this reader supports.
+     * Returns the major version supported by this reader.
      *
-     * @return the supported major version
+     * @return the major version this reader supports
      */
-    public int getSupportedMajorVersion() {
-        return supportedMajorVersion;
+    public int getSupportedVersion() {
+        return supportedVersion;
     }
 }

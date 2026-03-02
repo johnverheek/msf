@@ -1,53 +1,39 @@
 package dev.msf.core.model;
 
-import dev.msf.core.NotNull;
-
 /**
- * Immutable representation of the MSF file header.
+ * Immutable representation of the 48-byte MSF file header.
  *
- * <p>The header is exactly 48 bytes, begins at file offset 0, and is permanently frozen.
- * No future version of the MSF specification under major version 1 will alter any field.
- * See MSF Spec Section 3 and Section 12.2.
+ * <p>The header is permanently frozen at 48 bytes and is always located at file offset 0.
+ * No future V1 version of the specification will alter the size or meaning of any field.
  *
- * <p>All multi-byte integer fields are little-endian in the binary format. Java long values
- * are used for u32 fields to preserve the full unsigned range, per MSF Spec Appendix E.
+ * <p>All offset fields are stored as {@code long} values to allow correct unsigned u32
+ * interpretation per Appendix E. A value of {@code 0} for any optional block offset
+ * indicates the block is absent (Section 2.2).
  *
- * <h2>Header layout</h2>
- * <pre>
- * Offset  Size  Type    Field
- * ------  ----  ------  -----
- * 0       4     u8[4]   Magic bytes (0x4D 0x53 0x46 0x21 — "MSF!")
- * 4       2     u16     Major version
- * 6       2     u16     Minor version
- * 8       4     u32     Feature flags
- * 12      4     u32     MC data version
- * 16      4     u32     Metadata block offset
- * 20      4     u32     Global palette offset
- * 24      4     u32     Layer index offset
- * 28      4     u32     Entity block offset
- * 32      4     u32     Block entity block offset
- * 36      4     u32     File size
- * 40      8     u64     Header checksum (xxHash3 of bytes 0–39)
- * </pre>
+ * <p>Feature flags are stored as an {@code int}; callers should interpret bits using
+ * {@link FeatureFlags} constants. All reserved bits (10–31) must be 0 in V1.0 files.
  *
- * @param majorVersion         the MSF major version; must be 1 for V1 files
- * @param minorVersion         the MSF minor version; 0 for V1.0 files
- * @param featureFlags         bitmask of optional capabilities present in this file
- * @param mcDataVersion        Minecraft data version the schematic was authored in
- * @param metadataBlockOffset  absolute byte offset to the metadata block; MUST NOT be 0
- * @param globalPaletteOffset  absolute byte offset to the global palette block; MUST NOT be 0
- * @param layerIndexOffset     absolute byte offset to the layer index block; MUST NOT be 0
- * @param entityBlockOffset    absolute byte offset to the entity block; 0 if absent
- * @param blockEntityBlockOffset absolute byte offset to the block entity block; 0 if absent
- * @param fileSize             total byte length of the file
- * @param headerChecksum       xxHash3 digest of header bytes 0–39
+ * @param majorVersion          u16 — major format version; must be 1 for this reader
+ * @param minorVersion          u16 — minor format version; capability advertisement, not a gate
+ * @param featureFlags          u32 — bitmask of optional capabilities present in this file
+ * @param mcDataVersion         u32 — Minecraft data version the schematic was authored in
+ * @param metadataOffset        u32 — absolute byte offset to the metadata block; MUST NOT be 0
+ * @param globalPaletteOffset   u32 — absolute byte offset to the global palette block; MUST NOT be 0
+ * @param layerIndexOffset      u32 — absolute byte offset to the layer index block; MUST NOT be 0
+ * @param entityBlockOffset     u32 — absolute byte offset to the entity block; 0 if absent
+ * @param blockEntityBlockOffset u32 — absolute byte offset to the block entity block; 0 if absent
+ * @param fileSize              u32 — total byte length of the complete file including the 8-byte checksum
+ * @param headerChecksum        u64 — xxHash3-64 digest of header bytes 0–39 with seed 0
+ *
+ * @see MsfSpec Section 3 — header
+ * @see MsfSpec Appendix E — unsigned integer handling in Java
  */
 public record MsfHeader(
     int majorVersion,
     int minorVersion,
-    long featureFlags,
+    int featureFlags,
     long mcDataVersion,
-    long metadataBlockOffset,
+    long metadataOffset,
     long globalPaletteOffset,
     long layerIndexOffset,
     long entityBlockOffset,
@@ -55,212 +41,87 @@ public record MsfHeader(
     long fileSize,
     long headerChecksum
 ) {
-    /** The expected magic bytes at offset 0: {@code MSF!} (0x4D 0x53 0x46 0x21). */
-    public static final byte[] MAGIC = {0x4D, 0x53, 0x46, 0x21};
 
-    /** The major version this reader/writer implements. */
+    /** The MSF format major version this implementation supports. */
     public static final int SUPPORTED_MAJOR_VERSION = 1;
 
-    /** The minor version this writer produces for V1.0 files. */
-    public static final int CURRENT_MINOR_VERSION = 0;
+    /** The MSF format minor version this implementation supports. */
+    public static final int SUPPORTED_MINOR_VERSION = 0;
 
-    /** Total size of the header in bytes — frozen permanently. */
+    /** The size of the header in bytes. This value is permanently frozen. */
     public static final int HEADER_SIZE = 48;
 
-    // -------------------------------------------------------------------------
-    // Feature flag bit positions
-    // -------------------------------------------------------------------------
-
-    /** Feature flag bit 0: file contains entity data. */
-    public static final long FLAG_HAS_ENTITIES = 1L;
-
-    /** Feature flag bit 1: file contains block entity data. */
-    public static final long FLAG_HAS_BLOCK_ENTITIES = 1L << 1;
-
-    /** Feature flag bit 2: file contains biome data. */
-    public static final long FLAG_HAS_BIOME_DATA = 1L << 2;
-
-    /** Feature flag bit 3: file contains lighting hints. */
-    public static final long FLAG_HAS_LIGHTING_HINTS = 1L << 3;
-
-    /** Feature flag bit 4: file is a multi-region schematic. */
-    public static final long FLAG_MULTI_REGION = 1L << 4;
-
-    /** Feature flag bit 5: file is in delta/diff format. */
-    public static final long FLAG_DELTA_FORMAT = 1L << 5;
-
-    /** Feature flag bit 6: file contains signal ports. */
-    public static final long FLAG_HAS_SIGNAL_PORTS = 1L << 6;
-
-    /** Feature flag bit 7: file uses construction layers. */
-    public static final long FLAG_HAS_CONSTRUCTION_LAYERS = 1L << 7;
-
-    /** Feature flag bit 8: file uses the variant system. */
-    public static final long FLAG_HAS_VARIANT_SYSTEM = 1L << 8;
-
-    /** Feature flag bit 9: file contains palette substitution rules. */
-    public static final long FLAG_HAS_PALETTE_SUBSTITUTION = 1L << 9;
+    /** The expected magic bytes at the start of every MSF file (ASCII: {@code MSF!}). */
+    public static final byte[] MAGIC = { 0x4D, 0x53, 0x46, 0x21 };
 
     /**
-     * Returns {@code true} if the given feature flag bit is set in this header's feature flags.
+     * Feature flag bit constants for use with {@link #featureFlags()}.
      *
-     * @param flag one of the {@code FLAG_*} constants defined on this record
-     * @return {@code true} if the flag is set
+     * @see MsfSpec Section 3.3 — feature flags
      */
-    public boolean hasFlag(long flag) {
+    public static final class FeatureFlags {
+        /** Bit 0 — file contains an entity block. */
+        public static final int HAS_ENTITIES = 1 << 0;
+        /** Bit 1 — file contains a block entity block. */
+        public static final int HAS_BLOCK_ENTITIES = 1 << 1;
+        /** Bit 2 — file contains biome data in region payloads. */
+        public static final int HAS_BIOME_DATA = 1 << 2;
+        /** Bit 3 — file contains lighting hints. */
+        public static final int HAS_LIGHTING_HINTS = 1 << 3;
+        /** Bit 4 — file uses multi-region format. */
+        public static final int MULTI_REGION = 1 << 4;
+        /** Bit 5 — file is a delta/diff format file. */
+        public static final int DELTA_DIFF_FORMAT = 1 << 5;
+        /** Bit 6 — file contains signal ports. */
+        public static final int HAS_SIGNAL_PORTS = 1 << 6;
+        /** Bit 7 — file contains construction layers. */
+        public static final int HAS_CONSTRUCTION_LAYERS = 1 << 7;
+        /** Bit 8 — file uses the variant system. */
+        public static final int HAS_VARIANT_SYSTEM = 1 << 8;
+        /** Bit 9 — file contains palette substitution rules. */
+        public static final int HAS_PALETTE_SUBSTITUTION_RULES = 1 << 9;
+        /** Mask covering all defined V1.0 feature flag bits (0–9). */
+        public static final int DEFINED_BITS_MASK = 0x3FF;
+        /** Mask covering reserved bits 10–31. */
+        public static final int RESERVED_BITS_MASK = ~DEFINED_BITS_MASK;
+
+        private FeatureFlags() {}
+    }
+
+    /**
+     * Returns {@code true} if the given feature flag bit is set in this header.
+     *
+     * @param flag one of the {@link FeatureFlags} constants
+     * @return {@code true} if the flag bit is set
+     */
+    public boolean hasFlag(int flag) {
         return (featureFlags & flag) != 0;
     }
 
     /**
-     * Creates a {@link Builder} pre-populated from this header's fields.
+     * Returns {@code true} if the entity block is declared present by feature flags.
      *
-     * @return a builder initialised with this header's values
+     * @return {@code true} if {@link FeatureFlags#HAS_ENTITIES} is set
      */
-    @NotNull
-    public Builder toBuilder() {
-        return new Builder()
-            .majorVersion(majorVersion)
-            .minorVersion(minorVersion)
-            .featureFlags(featureFlags)
-            .mcDataVersion(mcDataVersion)
-            .metadataBlockOffset(metadataBlockOffset)
-            .globalPaletteOffset(globalPaletteOffset)
-            .layerIndexOffset(layerIndexOffset)
-            .entityBlockOffset(entityBlockOffset)
-            .blockEntityBlockOffset(blockEntityBlockOffset)
-            .fileSize(fileSize)
-            .headerChecksum(headerChecksum);
+    public boolean hasEntities() {
+        return hasFlag(FeatureFlags.HAS_ENTITIES);
     }
 
     /**
-     * Returns a new {@link Builder} with V1.0 defaults applied.
+     * Returns {@code true} if the block entity block is declared present by feature flags.
      *
-     * @return a fresh builder
+     * @return {@code true} if {@link FeatureFlags#HAS_BLOCK_ENTITIES} is set
      */
-    @NotNull
-    public static Builder builder() {
-        return new Builder();
+    public boolean hasBlockEntities() {
+        return hasFlag(FeatureFlags.HAS_BLOCK_ENTITIES);
     }
 
     /**
-     * Builder for constructing {@link MsfHeader} instances.
+     * Returns {@code true} if biome data is present in region payloads.
      *
-     * <p>The builder enforces no constraints — validation is the responsibility of
-     * {@link dev.msf.core.io.MsfWriter} on write and {@link dev.msf.core.io.MsfReader} on read.
+     * @return {@code true} if {@link FeatureFlags#HAS_BIOME_DATA} is set
      */
-    public static final class Builder {
-
-        private int majorVersion = SUPPORTED_MAJOR_VERSION;
-        private int minorVersion = CURRENT_MINOR_VERSION;
-        private long featureFlags = 0L;
-        private long mcDataVersion = 0L;
-        private long metadataBlockOffset = 0L;
-        private long globalPaletteOffset = 0L;
-        private long layerIndexOffset = 0L;
-        private long entityBlockOffset = 0L;
-        private long blockEntityBlockOffset = 0L;
-        private long fileSize = 0L;
-        private long headerChecksum = 0L;
-
-        private Builder() {}
-
-        /** @return this builder */
-        @NotNull
-        public Builder majorVersion(int majorVersion) {
-            this.majorVersion = majorVersion;
-            return this;
-        }
-
-        /** @return this builder */
-        @NotNull
-        public Builder minorVersion(int minorVersion) {
-            this.minorVersion = minorVersion;
-            return this;
-        }
-
-        /** @return this builder */
-        @NotNull
-        public Builder featureFlags(long featureFlags) {
-            this.featureFlags = featureFlags;
-            return this;
-        }
-
-        /** @return this builder */
-        @NotNull
-        public Builder mcDataVersion(long mcDataVersion) {
-            this.mcDataVersion = mcDataVersion;
-            return this;
-        }
-
-        /** @return this builder */
-        @NotNull
-        public Builder metadataBlockOffset(long metadataBlockOffset) {
-            this.metadataBlockOffset = metadataBlockOffset;
-            return this;
-        }
-
-        /** @return this builder */
-        @NotNull
-        public Builder globalPaletteOffset(long globalPaletteOffset) {
-            this.globalPaletteOffset = globalPaletteOffset;
-            return this;
-        }
-
-        /** @return this builder */
-        @NotNull
-        public Builder layerIndexOffset(long layerIndexOffset) {
-            this.layerIndexOffset = layerIndexOffset;
-            return this;
-        }
-
-        /** @return this builder */
-        @NotNull
-        public Builder entityBlockOffset(long entityBlockOffset) {
-            this.entityBlockOffset = entityBlockOffset;
-            return this;
-        }
-
-        /** @return this builder */
-        @NotNull
-        public Builder blockEntityBlockOffset(long blockEntityBlockOffset) {
-            this.blockEntityBlockOffset = blockEntityBlockOffset;
-            return this;
-        }
-
-        /** @return this builder */
-        @NotNull
-        public Builder fileSize(long fileSize) {
-            this.fileSize = fileSize;
-            return this;
-        }
-
-        /** @return this builder */
-        @NotNull
-        public Builder headerChecksum(long headerChecksum) {
-            this.headerChecksum = headerChecksum;
-            return this;
-        }
-
-        /**
-         * Builds the {@link MsfHeader}.
-         *
-         * @return a new immutable {@code MsfHeader}
-         */
-        @NotNull
-        public MsfHeader build() {
-            return new MsfHeader(
-                majorVersion,
-                minorVersion,
-                featureFlags,
-                mcDataVersion,
-                metadataBlockOffset,
-                globalPaletteOffset,
-                layerIndexOffset,
-                entityBlockOffset,
-                blockEntityBlockOffset,
-                fileSize,
-                headerChecksum
-            );
-        }
+    public boolean hasBiomeData() {
+        return hasFlag(FeatureFlags.HAS_BIOME_DATA);
     }
 }
