@@ -15,6 +15,35 @@ import java.nio.ByteOrder;
  * against the formula, detecting out-of-range palette IDs, and rejecting
  * {@code bits_per_entry = 0}.
  *
+ * <h2>Serialization Layout</h2>
+ * <pre>
+ *   Byte Offset  Field Name               Type    Description
+ *   -----------  -----------------------  ------  -----------------------------------------
+ *   0            bits_per_entry           u8      Bits used per palette ID (1-64)
+ *   1            packed_array_length      u32-LE  Number of u64 words (little-endian)
+ *   5            packed block data        u64[]   Palette IDs packed per Section 7.5
+ * </pre>
+ *
+ * <h2>Encoder Behavior</h2>
+ * <ul>
+ *   <li>Computes {@code bits_per_entry} from {@code paletteSize} using
+ *       {@link BitPackedArray#bitsPerEntry}</li>
+ *   <li>Validates all palette IDs are in [0, paletteSize)</li>
+ *   <li>Packs using {@link BitPackedArray#pack}</li>
+ *   <li>Writes header followed by packed words</li>
+ * </ul>
+ *
+ * <h2>Decoder Validation Steps</h2>
+ * <ol>
+ *   <li>Read {@code bits_per_entry} and reject if 0</li>
+ *   <li>Read {@code packed_array_length} (u32-LE)</li>
+ *   <li>Validate stored {@code packed_array_length} matches
+ *       {@link BitPackedArray#wordsRequired} — prevents misaligned parsing</li>
+ *   <li>Read all packed u64 words</li>
+ *   <li>Unpack using {@link BitPackedArray#unpack}</li>
+ *   <li>Validate every palette ID is < {@code paletteSize} — detects corruption</li>
+ * </ol>
+ *
  * <p>Callers are responsible for providing the decompressed byte buffer positioned
  * at the start of the block data section and for advancing it past the data on read.
  *

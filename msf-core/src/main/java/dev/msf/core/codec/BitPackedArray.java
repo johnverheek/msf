@@ -18,6 +18,28 @@ package dev.msf.core.codec;
  * and MUST NOT be re-derived independently (Section 7.5).</li>
  * </ul>
  *
+ * <h2>No-Spanning Rule Explained</h2>
+ * <p>
+ * A 64-bit word can hold multiple entries, but if the next entry would extend
+ * beyond bit 63, it must start in the next word instead. Example with 5-bits-per-entry:
+ * </p>
+ * <pre>
+ *   Word 0:  [Entry 0: 5 bits][Entry 1: 5 bits][Entry 2: 5 bits][Entry 3: 5 bits]
+ *            bits 0-4        5-9               10-14             15-19
+ *            Entry 4 would need bits 20-24, fits in word 0 ✓
+ *
+ *   Word 0 continued...
+ *            [Entry 4: 5 bits][Entry 5: 5 bits][Entry 6: 5 bits][Entry 7: 5 bits]
+ *            bits 20-24      25-29             30-34             35-39
+ *            Entry 8 would need bits 40-44, fits in word 0 ✓
+ *
+ *            [Entry 8: 5 bits][Entry 9: 5 bits][padding... 15 bits unused]
+ *            bits 40-44      45-49             50-63
+ *
+ *   Word 1:  [Entry 10: 5 bits]...  (Entry 10 starts in word 1 because bits 50-54
+ *                                     would span into word 1, violating the rule)
+ * </pre>
+ *
  * <h2>Packed array length formula (Section 7.5)</h2>
  * 
  * <pre>
@@ -160,6 +182,19 @@ public final class BitPackedArray {
      * boundary
      * begins in the next word; remaining bits in the previous word are zeroed.
      *
+     * <h3>No-Spanning Rule (Section 7.5)</h3>
+     * <p>
+     * If the next entry would extend past bit 63 of the current word, it is placed in the next
+     * word at bit offset 0. The remaining bits of the current word are left as 0 (padding).
+     * Example:
+     * <pre>
+     *     if (bitOffset + bitsPerEntry > 64) {
+     *         wordIndex++;           // Move to next word
+     *         bitOffset = 0;         // Start at bit 0
+     *         // Previous word's remaining bits stay as 0
+     *     }
+     * </pre>
+     *
      * @param values       the integer values to pack; each value must be in [0,
      *                     2^bitsPerEntry)
      * @param bitsPerEntry bits to use per entry; must be in [1, 64]
@@ -189,14 +224,21 @@ public final class BitPackedArray {
                 throw new IllegalArgumentException(
                         "Value " + (v & 0xFFFFFFFFL) + " does not fit in " + bitsPerEntry + " bits");
             }
-            // Would this entry span a word boundary?
+            
+            // NO-SPANNING RULE (Section 7.5):
+            // If this entry would span a word boundary (cross bit 63), place it in the next word.
+            // Remaining bits of the current word are set to 0 (padding).
+            // Example with 5-bit entries: if bitOffset=60, this entry needs bits 60-64 (would need next word).
             if (bitOffset + bitsPerEntry > 64) {
-                // Start a new word — per spec the entry begins in the next word
+                // Move to next word
                 wordIndex++;
                 bitOffset = 0;
             }
+            
             words[wordIndex] |= v << bitOffset;
             bitOffset += bitsPerEntry;
+            
+            // Finished packing a full 64-bit word, move to the next
             if (bitOffset == 64) {
                 wordIndex++;
                 bitOffset = 0;
@@ -220,6 +262,12 @@ public final class BitPackedArray {
      * boundary don't span. Any trailing padding bits (set to 0 by writers) are
      * ignored.
      *
+     * <h3>No-Spanning Rule (Section 7.5)</h3>
+     * <p>
+     * If an entry would span a word boundary, it starts in the next word at bit 0.
+     * This mirrors the packing rule and ensures readers skip over the same padding bits
+     * that writers created.
+     *
      * @param words        the packed {@code long} array
      * @param entryCount   number of values to unpack
      * @param bitsPerEntry bits per entry; must be in [1, 64]
@@ -242,14 +290,21 @@ public final class BitPackedArray {
         int bitOffset = 0;
 
         for (int i = 0; i < entryCount; i++) {
-            // Would this entry span a word boundary?
+            // NO-SPANNING RULE (Section 7.5):
+            // If reading this entry would cross the word boundary, skip to the next word.
+            // This mirrors the packing rule: writers place wide entries in the next word
+            // to avoid spanning bit 63.
             if (bitOffset + bitsPerEntry > 64) {
+                // Skip to next word (remaining bits of current word are padding, ignored)
                 wordIndex++;
                 bitOffset = 0;
             }
+            
             long v = (words[wordIndex] >>> bitOffset) & mask;
             result[i] = (int) v;
             bitOffset += bitsPerEntry;
+            
+            // Finished reading a full 64-bit word, move to the next
             if (bitOffset == 64) {
                 wordIndex++;
                 bitOffset = 0;

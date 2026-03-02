@@ -13,6 +13,53 @@ package dev.msf.core.util;
  *     index = y * (sizeZ * sizeX) + z * sizeX + x
  * </pre>
  *
+ * <h2>Worked Example: 3×2×4 Region</h2>
+ * <p>
+ * Coordinates map to array indices as follows:
+ * </p>
+ * <table border="1" style="border-collapse:collapse; margin:10px 0;">
+ *   <tr style="background-color:#f0f0f0;">
+ *     <th>Coordinate (x, y, z)</th>
+ *     <th>Array Index</th>
+ *     <th>Computation</th>
+ *   </tr>
+ *   <tr>
+ *     <td>(0, 0, 0)</td>
+ *     <td>0</td>
+ *     <td>0*(4*3) + 0*3 + 0 = 0</td>
+ *   </tr>
+ *   <tr>
+ *     <td>(1, 0, 0)</td>
+ *     <td>1</td>
+ *     <td>0*(4*3) + 0*3 + 1 = 1</td>
+ *   </tr>
+ *   <tr>
+ *     <td>(2, 0, 0)</td>
+ *     <td>2</td>
+ *     <td>0*(4*3) + 0*3 + 2 = 2</td>
+ *   </tr>
+ *   <tr>
+ *     <td>(0, 0, 1)</td>
+ *     <td>3</td>
+ *     <td>0*(4*3) + 1*3 + 0 = 3</td>
+ *   </tr>
+ *   <tr>
+ *     <td>(1, 0, 1)</td>
+ *     <td>4</td>
+ *     <td>0*(4*3) + 1*3 + 1 = 4</td>
+ *   </tr>
+ *   <tr style="background-color:#fff0f0;">
+ *     <td>(0, 1, 0)</td>
+ *     <td>12</td>
+ *     <td>1*(4*3) + 0*3 + 0 = 12</td>
+ *   </tr>
+ *   <tr>
+ *     <td>(2, 1, 3)</td>
+ *     <td>23</td>
+ *     <td>1*(4*3) + 3*3 + 2 = 23 (maximum)</td>
+ *   </tr>
+ * </table>
+ *
  * <p>All arithmetic in this class uses {@code long} to prevent overflow when region
  * dimensions are large. The caller is responsible for validating that dimensions are
  * positive before calling these methods.
