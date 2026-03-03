@@ -4,23 +4,34 @@ import dev.msf.core.MsfChecksumException;
 import dev.msf.core.MsfException;
 import dev.msf.core.MsfParseException;
 import dev.msf.core.MsfVersionException;
-import dev.msf.core.checksum.XxHash3;
-import dev.msf.core.model.MsfHeader;
 import dev.msf.core.MsfWarning;
+import dev.msf.core.checksum.XxHash3;
+import dev.msf.core.model.MsfBlockEntity;
+import dev.msf.core.model.MsfEntity;
+import dev.msf.core.model.MsfFile;
+import dev.msf.core.model.MsfHeader;
+import dev.msf.core.model.MsfLayerIndex;
+import dev.msf.core.model.MsfMetadata;
+import dev.msf.core.model.MsfPalette;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.function.Consumer;
 
 /**
- * Parses MSF file headers according to the MSF V1 specification.
+ * Parses MSF files according to the MSF V1 specification.
  *
  * <p>Session 1 scope: header parsing, validation sequence, file size check, and file
- * checksum verification. Palette, layer index, region data, and remaining blocks are
- * implemented in Session 2.
+ * checksum verification.
+ *
+ * <p>Session 3 scope: full file reading — metadata, palette, layer index, entity block,
+ * block entity block, and composite {@link MsfFile} assembly.
  *
  * <h2>Validation sequence</h2>
  * <p>The header validation sequence is strictly ordered per Section 3.7:
@@ -34,6 +45,12 @@ import java.util.function.Consumer;
  * steps pass. A reader that acts on any other field before passing all three steps
  * is non-conforming.
  *
+ * <h2>Block location strategy</h2>
+ * <p>All blocks are located by absolute offset from the header (Section 3.5). The reader
+ * jumps directly to each known block's offset and never reads sequentially between blocks.
+ * Any bytes not covered by a known block offset are never accessed — unknown future blocks
+ * are skipped implicitly (forward compatibility, Section 3.8).
+ *
  * <h2>Warning mechanism</h2>
  * <p>Warnings are delivered via an optional {@code Consumer<MsfWarning>}. Callers that
  * do not provide a consumer receive no warnings. Warnings are never emitted to stdout,
@@ -46,6 +63,8 @@ import java.util.function.Consumer;
  *
  * @see MsfSpec Section 3 — header
  * @see MsfSpec Section 3.7 — header checksum and validation sequence
+ * @see MsfSpec Section 8 — entity block
+ * @see MsfSpec Section 9 — block entity block
  * @see MsfSpec Section 11 — file checksum
  * @see MsfSpec Appendix E — unsigned integer handling in Java
  */
@@ -55,9 +74,118 @@ public final class MsfReader {
         // Utility class — all methods are static
     }
 
-    // -------------------------------------------------------------------------
-    // Public API
-    // -------------------------------------------------------------------------
+    // =========================================================================
+    // Full-file read API (Session 3)
+    // =========================================================================
+
+    /**
+     * Reads a complete MSF file from the given path.
+     *
+     * <p>Uses {@link MsfReaderConfig#DEFAULT}: throws on file checksum failure.
+     * No warning consumer is provided — warnings are silently discarded.
+     *
+     * @param path the path to the MSF file
+     * @return the parsed {@link MsfFile}
+     * @throws IOException  if an I/O error occurs reading the file
+     * @throws MsfException if the file is not a valid MSF V1 file
+     */
+    public static MsfFile readFile(Path path) throws IOException, MsfException {
+        return readFile(path, MsfReaderConfig.DEFAULT, null);
+    }
+
+    /**
+     * Reads a complete MSF file from the given path.
+     *
+     * @param path            the path to the MSF file
+     * @param warningConsumer receives warnings produced during parsing; may be {@code null}
+     * @return the parsed {@link MsfFile}
+     * @throws IOException  if an I/O error occurs reading the file
+     * @throws MsfException if the file is not a valid MSF V1 file
+     */
+    public static MsfFile readFile(
+        Path path,
+        Consumer<MsfWarning> warningConsumer
+    ) throws IOException, MsfException {
+        return readFile(path, MsfReaderConfig.DEFAULT, warningConsumer);
+    }
+
+    /**
+     * Reads a complete MSF file from the given path.
+     *
+     * @param path            the path to the MSF file
+     * @param config          reader configuration
+     * @param warningConsumer receives warnings produced during parsing; may be {@code null}
+     * @return the parsed {@link MsfFile}
+     * @throws IOException  if an I/O error occurs reading the file
+     * @throws MsfException if the file is not a valid MSF V1 file
+     */
+    public static MsfFile readFile(
+        Path path,
+        MsfReaderConfig config,
+        Consumer<MsfWarning> warningConsumer
+    ) throws IOException, MsfException {
+        byte[] fileBytes = Files.readAllBytes(path);
+        return readFile(fileBytes, config, warningConsumer);
+    }
+
+    /**
+     * Reads a complete MSF file from a byte array.
+     *
+     * <p>The reader locates all blocks by absolute offset from the header (Section 3.5).
+     * Any bytes not covered by a known block offset are never accessed — unknown future
+     * blocks are skipped implicitly (forward compatibility, Section 3.8).
+     *
+     * <p>Entity and block entity blocks are read only when the corresponding feature flag
+     * is set and the offset is non-zero. A zero entity/block-entity count in a block whose
+     * flag is set emits {@link MsfWarning.Code#FEATURE_FLAG_CONFLICT} and treats the block
+     * as absent (Sections 8.2 and 9.2).
+     *
+     * @param fileBytes       the complete content of the MSF file
+     * @param config          reader configuration
+     * @param warningConsumer receives warnings produced during parsing; may be {@code null}
+     * @return the parsed {@link MsfFile}
+     * @throws MsfException if the file is not a valid MSF V1 file
+     */
+    public static MsfFile readFile(
+        byte[] fileBytes,
+        MsfReaderConfig config,
+        Consumer<MsfWarning> warningConsumer
+    ) throws MsfException {
+        // Validate header, checksums, and file integrity first.
+        MsfHeader header = readHeaderFromBytes(fileBytes, config, warningConsumer);
+
+        // Parse all required blocks by absolute offset (Section 3.5).
+        MsfMetadata metadata = MsfMetadata.fromBytes(
+            fileBytes, (int) header.metadataOffset(), warningConsumer
+        );
+        MsfPalette palette = MsfPalette.fromBytes(
+            fileBytes, (int) header.globalPaletteOffset()
+        );
+        MsfLayerIndex layerIndex = MsfLayerIndex.fromBytes(
+            fileBytes, (int) header.layerIndexOffset(),
+            palette.entries().size(), header.hasBiomeData(), warningConsumer
+        );
+
+        // Parse optional blocks only when the feature flag is set and the offset is non-zero.
+        // FEATURE_FLAG_CONFLICT for flag+offset mismatch was already emitted by readHeaderFromBytes.
+        List<MsfEntity> entities = null;
+        if (header.hasEntities() && header.entityBlockOffset() != 0L) {
+            entities = readEntityBlock(fileBytes, (int) header.entityBlockOffset(), warningConsumer);
+        }
+
+        List<MsfBlockEntity> blockEntities = null;
+        if (header.hasBlockEntities() && header.blockEntityBlockOffset() != 0L) {
+            blockEntities = readBlockEntityBlock(
+                fileBytes, (int) header.blockEntityBlockOffset(), warningConsumer
+            );
+        }
+
+        return MsfFile.ofParsed(header, metadata, palette, layerIndex, entities, blockEntities);
+    }
+
+    // =========================================================================
+    // Header-only read API (Session 1)
+    // =========================================================================
 
     /**
      * Reads and validates the header of an MSF file from the given path.
@@ -353,9 +481,138 @@ public final class MsfReader {
         return header;
     }
 
-    // -------------------------------------------------------------------------
+    // =========================================================================
+    // Private block readers (Session 3)
+    // =========================================================================
+
+    /**
+     * Reads the entity block at the given absolute offset (Section 8.1).
+     *
+     * <p>If the entity count is 0, emits {@link MsfWarning.Code#FEATURE_FLAG_CONFLICT}
+     * and returns {@code null} — the block is treated as absent per Section 8.2.
+     *
+     * @param data            the complete file bytes
+     * @param offset          absolute byte offset of the entity block
+     * @param warningConsumer warning consumer; may be {@code null}
+     * @return the entity list, or {@code null} if the block has entity count 0
+     */
+    private static List<MsfEntity> readEntityBlock(
+        byte[] data,
+        int offset,
+        Consumer<MsfWarning> warningConsumer
+    ) {
+        ByteBuffer buf = ByteBuffer.wrap(data, offset, data.length - offset)
+            .order(ByteOrder.LITTLE_ENDIAN);
+
+        // u32 block_length — read and discard; we locate blocks by absolute offset
+        Integer.toUnsignedLong(buf.getInt());
+
+        // u32 entity_count
+        long count = Integer.toUnsignedLong(buf.getInt());
+
+        if (count == 0L) {
+            warn(warningConsumer, MsfWarning.atOffset(
+                MsfWarning.Code.FEATURE_FLAG_CONFLICT,
+                "Entity block entity count is 0 — HAS_ENTITIES flag is set but block is empty "
+                + "(Section 8.2); treating entity block as absent",
+                (long) offset
+            ));
+            return null;
+        }
+
+        List<MsfEntity> entities = new ArrayList<>();
+        for (long i = 0; i < count; i++) {
+            double posX  = buf.getDouble();     // f64 position X
+            double posY  = buf.getDouble();     // f64 position Y
+            double posZ  = buf.getDouble();     // f64 position Z
+            float yaw    = buf.getFloat();      // f32 yaw
+            float pitch  = buf.getFloat();      // f32 pitch
+            String type  = readStr(buf);        // str entity type
+            int nbtLen   = Short.toUnsignedInt(buf.getShort());  // u16 NBT payload length
+            byte[] nbt   = new byte[nbtLen];
+            buf.get(nbt);                       // u8[] NBT payload
+
+            entities.add(MsfEntity.builder()
+                .position(posX, posY, posZ)
+                .rotation(yaw, pitch)
+                .entityType(type)
+                .nbtPayload(nbt)
+                .build());
+        }
+        return entities;
+    }
+
+    /**
+     * Reads the block entity block at the given absolute offset (Section 9.1).
+     *
+     * <p>If the block entity count is 0, emits {@link MsfWarning.Code#FEATURE_FLAG_CONFLICT}
+     * and returns {@code null} — the block is treated as absent per Section 9.2.
+     *
+     * @param data            the complete file bytes
+     * @param offset          absolute byte offset of the block entity block
+     * @param warningConsumer warning consumer; may be {@code null}
+     * @return the block entity list, or {@code null} if the block has count 0
+     */
+    private static List<MsfBlockEntity> readBlockEntityBlock(
+        byte[] data,
+        int offset,
+        Consumer<MsfWarning> warningConsumer
+    ) {
+        ByteBuffer buf = ByteBuffer.wrap(data, offset, data.length - offset)
+            .order(ByteOrder.LITTLE_ENDIAN);
+
+        // u32 block_length — read and discard; we locate blocks by absolute offset
+        Integer.toUnsignedLong(buf.getInt());
+
+        // u32 block_entity_count
+        long count = Integer.toUnsignedLong(buf.getInt());
+
+        if (count == 0L) {
+            warn(warningConsumer, MsfWarning.atOffset(
+                MsfWarning.Code.FEATURE_FLAG_CONFLICT,
+                "Block entity block count is 0 — HAS_BLOCK_ENTITIES flag is set but block is empty "
+                + "(Section 9.2); treating block entity block as absent",
+                (long) offset
+            ));
+            return null;
+        }
+
+        List<MsfBlockEntity> blockEntities = new ArrayList<>();
+        for (long i = 0; i < count; i++) {
+            int posX    = buf.getInt();         // i32 position X
+            int posY    = buf.getInt();         // i32 position Y
+            int posZ    = buf.getInt();         // i32 position Z
+            String type = readStr(buf);         // str block entity type
+            int nbtLen  = Short.toUnsignedInt(buf.getShort());  // u16 NBT payload length
+            byte[] nbt  = new byte[nbtLen];
+            buf.get(nbt);                       // u8[] NBT payload
+
+            blockEntities.add(MsfBlockEntity.builder()
+                .position(posX, posY, posZ)
+                .blockEntityType(type)
+                .nbtPayload(nbt)
+                .build());
+        }
+        return blockEntities;
+    }
+
+    /**
+     * Reads a {@code str} field from the buffer: u16 little-endian byte length followed
+     * by UTF-8 bytes. Per Section 2.1 — all multi-byte integers are little-endian.
+     *
+     * @param buf the buffer positioned at the u16 length field
+     * @return the decoded string
+     */
+    private static String readStr(ByteBuffer buf) {
+        int len = Short.toUnsignedInt(buf.getShort());
+        byte[] bytes = new byte[len];
+        buf.get(bytes);
+        return new String(bytes, StandardCharsets.UTF_8);
+    }
+
+    // =========================================================================
     // Private helpers
-    // -------------------------------------------------------------------------
+    // =========================================================================
 
     /**
      * Checks that a required block offset is within the bounds declared by {@code fileSize}.
