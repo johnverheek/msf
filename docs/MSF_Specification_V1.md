@@ -149,7 +149,7 @@ Bit 9:   Has palette substitution rules
 Bit 10–31: Reserved, MUST be 0 in V1.0
 ```
 
-Readers MUST NOT reject a file solely because a feature flag bit is set that the reader does not support. Readers MUST skip blocks associated with unsupported feature flags using the length prefix present in each block header.
+Readers MUST NOT reject a file solely because a feature flag bit is set that the reader does not support. Readers MUST skip blocks associated with unsupported feature flags using the block length field at the start of each block.
 
 Readers encountering a V1.0 file — where the file's minor version equals 0 — with any of bits 10–31 set MUST emit a warning identifying which reserved bits are set, as this indicates a non-conforming writer. Readers encountering a file whose minor version exceeds the reader's implemented minor version MUST NOT warn on reserved bits, as those bits may carry defined meaning in a later minor version the reader does not implement.
 
@@ -161,7 +161,7 @@ Writers MUST set a feature flag bit if and only if the corresponding optional bl
 
 The MC data version (offset 12) is the integer data version of the Minecraft release the schematic was authored in. This value is sourced from Minecraft's version.json. For example, Minecraft 1.21 has data version 3953.
 
-Readers MUST read this field before attempting to interpret any blockstate strings. Readers SHOULD warn the user if the file's MC data version differs from the currently loaded game version.
+Readers MUST read this field before attempting to interpret any blockstate strings. Readers SHOULD emit a DATA_VERSION_MISMATCH warning if the file's MC data version differs from the currently loaded game version.
 
 This field is in the header rather than the metadata block because readers may need it to determine whether to attempt reading the rest of the file.
 
@@ -172,7 +172,7 @@ Offsets at positions 16–35 are absolute byte offsets from the beginning of the
 - **Metadata block offset** (16) — MUST NOT be 0. If a reader encounters 0 here it MUST throw MsfParseException immediately. All MSF files MUST contain a metadata block.
 - **Global palette offset** (20) — MUST NOT be 0. If a reader encounters 0 here it MUST throw MsfParseException immediately. All MSF files MUST contain a global palette block.
 - **Layer index offset** (24) — MUST NOT be 0. If a reader encounters 0 here it MUST throw MsfParseException immediately. All MSF files MUST contain a layer index block.
-- **Entity block offset** (28) — MUST be 0 if feature flag bit 0 is not set. If a reader encounters a non-zero value here while feature flag bit 0 is not set, it MUST emit a FEATURE_FLAG_CONFLICT warning and MUST ignore the offset, treating the entity block as absent. The feature flag is authoritative for optional blocks. If a reader encounters a zero value here while feature flag bit 0 is set, it MUST emit a FEATURE_FLAG_CONFLICT warning. The reader MAY continue without the entity block or MAY throw MsfParseException — the chosen behavior MUST be documented by the implementation. Writers MUST ensure the entity block offset is non-zero if and only if feature flag bit 0 is set. Writers MUST set the entity block offset to the correct absolute byte offset of the entity block before writing the header. Writing a non-zero feature flag bit 0 with a zero entity block offset, or a zero feature flag bit 0 with a non-zero entity block offset, constitutes a non-conforming write.
+- **Entity block offset** (28) — MUST be 0 if feature flag bit 0 is not set. If a reader encounters a non-zero value here while feature flag bit 0 is not set, it MUST emit a FEATURE_FLAG_CONFLICT warning and MUST ignore the offset, treating the entity block as absent. The feature flag is authoritative for optional blocks. If a reader encounters a zero value here while feature flag bit 0 is set, it MUST emit a FEATURE_FLAG_CONFLICT warning. The reader MAY continue without the entity block or MAY throw MsfParseException — the reader's chosen behavior MUST be documented by the reader implementation. Writers MUST ensure the entity block offset is non-zero if and only if feature flag bit 0 is set. Writers MUST set the entity block offset to the correct absolute byte offset of the entity block before writing the header. Writing a non-zero feature flag bit 0 with a zero entity block offset, or a zero feature flag bit 0 with a non-zero entity block offset, constitutes a non-conforming write.
 - **Block entity block offset** (32) — MUST be 0 if feature flag bit 1 is not set. The same rules that apply to the entity block offset apply to this field with respect to feature flag bit 1, including the writer obligations for flag/offset consistency.
 
 ### 3.5.1 Warning Mechanism
@@ -192,6 +192,7 @@ Defined warning codes and the conditions that trigger them:
 |`FEATURE_FLAG_CONFLICT`  |Offset field state conflicts with the corresponding feature flag (Section 3.5)                                                             |
 |`OFFSET_BEYOND_FILE_SIZE`|A non-zero block offset is at or beyond the file_size value (Section 3.5)                                                                  |
 |`DATA_VERSION_MISMATCH`  |File MC data version differs from the currently active game version (Section 3.4)                                                          |
+|`THUMBNAIL_INVALID`      |Thumbnail size is non-zero but the thumbnail bytes are not a valid PNG file (Section 5.2)                                                  |
 
 A file size mismatch warning and a subsequent file checksum failure warning MUST be linked — the FILE_CHECKSUM_FAILURE warning message MUST note that the result is unreliable due to the prior FILE_SIZE_MISMATCH.
 
@@ -250,7 +251,7 @@ u8[]    Blockstate string (UTF-8, not null terminated)
 
 **Palette entries MUST be deduplicated.** No two entries in the palette may represent the same blockstate. Writers MUST check for duplicates before writing and MUST throw MsfPaletteException if the input contains duplicate blockstate strings, identifying the duplicated string. Readers encountering duplicate palette entries MUST throw MsfParseException. A duplicate palette entry indicates a non-conforming writer and the palette cannot be trusted to correctly map block IDs to blockstate strings. Silent deduplication by readers is not permitted.
 
-**Blockstate property ordering MUST follow canonical Minecraft ordering.** Properties within a blockstate string MUST appear in the order they are registered in Minecraft's BlockStateDefinition for that block as of the MC data version declared in the header. Implementations MUST NOT reorder properties alphabetically or by any other scheme.
+**Writers MUST follow canonical Minecraft property ordering within blockstate strings.** Writers MUST NOT reorder properties alphabetically or by any other scheme. Properties within a blockstate string MUST appear in the order they are registered in Minecraft's BlockStateDefinition for that block as of the MC data version declared in the header.
 
 Example of canonical ordering for oak stairs:
 
@@ -337,7 +338,7 @@ The placement metadata fields follow immediately after the thumbnail bytes. Sect
 
 **License identifier** SHOULD use SPDX license identifiers where applicable (e.g. `CC-BY-4.0`, `MIT`). An empty string indicates no license is declared.
 
-**Thumbnail** — the thumbnail size field is a u32 containing the byte length of the PNG data that follows. A value of 0 indicates no thumbnail is present and no bytes follow. A non-zero value indicates that exactly that many bytes of PNG data follow immediately. Readers MAY use this field to skip the thumbnail entirely by seeking forward thumbnail size bytes from the start of the thumbnail data. When thumbnail size is non-zero but the bytes do not constitute a valid PNG file, readers MUST emit a warning and MUST skip exactly thumbnail size bytes, continuing parsing from the field immediately following the thumbnail data. Readers MUST NOT reject the file solely because the thumbnail is malformed.
+**Thumbnail** — the thumbnail size field is a u32 containing the byte length of the PNG data that follows. A value of 0 indicates no thumbnail is present and no bytes follow. A non-zero value indicates that exactly that many bytes of PNG data follow immediately. Readers MAY use this field to skip the thumbnail entirely by seeking forward thumbnail size bytes from the start of the thumbnail data. When thumbnail size is non-zero but the bytes do not constitute a valid PNG file, readers MUST emit a THUMBNAIL_INVALID warning and MUST skip exactly thumbnail size bytes, continuing parsing from the field immediately following the thumbnail data. Readers MUST NOT reject the file solely because the thumbnail is malformed.
 
 **Tags** are freeform UTF-8 strings. No controlled vocabulary is defined in V1. Tags are case-sensitive.
 
@@ -386,7 +387,7 @@ Readers encountering bits 2–7 set in any layer flags field MUST NOT reject the
 
 **Construction order index** defines the intended placement sequence. Lower values are placed first. Multiple layers MAY share the same construction order index indicating they can be placed in parallel.
 
-**Dependencies** list layer IDs that MUST be placed before this layer. Readers SHOULD warn when a user attempts to place a layer before its dependencies. A layer MUST NOT list itself as a dependency. Circular dependencies are invalid and writers MUST NOT produce them.
+**Dependencies** list layer IDs that MUST be placed before this layer. Tools SHOULD warn the user when a placement is attempted for a layer whose dependencies have not yet been placed. A layer MUST NOT list itself as a dependency. Circular dependencies are invalid and writers MUST NOT produce them.
 
 **Layer count** is a u8. The minimum layer count is 1. The maximum layer count is 255. Every MSF file MUST contain at least one layer. Writers given more than 255 layers MUST throw IllegalArgumentException identifying the field name, the count provided, and the maximum permitted value of 255.
 
@@ -431,7 +432,7 @@ The uncompressed data length field contains the expected byte length of the payl
 
 Writers SHOULD use zstd compression. Readers MUST support all four compression types.
 
-Compression type values 0x04 through 0xFF are reserved. Readers encountering an unrecognized compression type value MUST throw MsfParseException. Readers MUST NOT attempt to interpret a region payload whose compression type is unrecognized — there is no safe fallback behavior for an undecompressible payload. Future minor versions MAY define additional compression type values. A reader that does not implement a compression type defined in a later minor version MUST still throw MsfParseException on encountering it, as the payload cannot be safely decoded regardless of minor version.
+Compression type values 0x04 through 0xFF are reserved. Readers encountering an unrecognized compression type value MUST throw MsfParseException. Readers MUST NOT attempt to interpret a region payload whose compression type is unrecognized — a payload with an unknown compression type cannot be decoded safely, and there is no fallback. Future minor versions MAY define additional compression type values. A reader that does not implement a compression type defined in a later minor version MUST still throw MsfParseException on encountering it, as the payload cannot be safely decoded regardless of minor version.
 
 ### 7.3 Region Payload
 
@@ -476,7 +477,9 @@ Palette IDs are packed into u64 words. The number of bits used per entry is:
 bits_per_entry = max(1, ceil(log2(palette_entry_count)))
 ```
 
-This formula is defined only for palette_entry_count ≥ 1. Since palette entry 0 (minecraft:air) is always present per Section 4.3, the minimum palette entry count referenced by any region is 1. A region payload with a palette entry count of 0 is invalid and MUST NOT be produced by writers. Readers encountering bits_per_entry = 0 MUST throw MsfParseException.
+In this formula, `palette_entry_count` is the total number of entries in the global palette, including the mandatory `minecraft:air` entry at palette ID 0. Writers MUST use the global palette entry count when computing bits_per_entry so that every valid global palette ID can be represented in the packed array. Writers MUST NOT use a region-specific or deduplicated entry count.
+
+This formula is defined only for palette_entry_count ≥ 1. Since palette entry 0 (`minecraft:air`) is always present per Section 4.3, the minimum global palette entry count is 1. A region payload with a bits_per_entry value of 0 is invalid and MUST NOT be produced by writers. Readers encountering bits_per_entry = 0 MUST throw MsfParseException.
 
 Writers MUST store the actual bits_per_entry value explicitly. Readers MUST use the stored bits_per_entry value and MUST NOT derive it independently.
 
@@ -571,7 +574,7 @@ u32     Block entity count
   i32   Position Z (relative to anchor)
   str   Block entity type (e.g. "minecraft:chest")
   u16   NBT payload length
-  u8[]  NBT payload (excludes position and block entity type — stored in the id NBT tag)
+  u8[]  NBT payload (binary NBT, excludes position tags and id tag)
 ```
 
 ### 9.2 Normative Requirements
@@ -774,7 +777,7 @@ Blockstate property ordering follows the registration order in Minecraft's Block
 
 ## Appendix D — xxHash3 Reference
 
-xxHash3 is used for both the header checksum and the file checksum. The canonical reference implementation is available at https://github.com/Cyan4973/xxHash. Java implementations may use the net.jpountz.lz4:lz4-java library which bundles xxHash3 support.
+xxHash3 is used for both the header checksum and the file checksum. The canonical reference implementation is available at https://github.com/Cyan4973/xxHash. Java implementations may use the `org.lz4:lz4-java` library, which bundles xxHash3 support.
 
 The seed value for all xxHash3 computations in MSF is **0** (default seed).
 
