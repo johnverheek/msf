@@ -12,6 +12,8 @@ package dev.msf.core;
  */
 public class MsfVersionException extends MsfException {
 
+    private static final long serialVersionUID = 1L;
+
     /** The major version found in the file. */
     private final int foundVersion;
 

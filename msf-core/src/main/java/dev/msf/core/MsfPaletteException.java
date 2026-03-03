@@ -12,6 +12,8 @@ package dev.msf.core;
  */
 public class MsfPaletteException extends MsfException {
 
+    private static final long serialVersionUID = 1L;
+
     /**
      * Creates a new {@code MsfPaletteException} with the given message.
      *

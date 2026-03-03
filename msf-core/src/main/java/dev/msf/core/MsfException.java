@@ -14,6 +14,8 @@ package dev.msf.core;
  */
 public class MsfException extends Exception {
 
+    private static final long serialVersionUID = 1L;
+
     /**
      * Creates a new {@code MsfException} with the given message.
      *

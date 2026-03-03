@@ -1,8 +1,6 @@
 package dev.msf.core.io;
 
-import dev.msf.core.MsfCompressionException;
 import dev.msf.core.MsfException;
-import dev.msf.core.MsfPaletteException;
 import dev.msf.core.checksum.XxHash3;
 import dev.msf.core.compression.CompressionType;
 import dev.msf.core.model.MsfBlockEntity;
@@ -122,10 +120,10 @@ public final class MsfWriter {
         byte[] blockEntityBytes = null;
 
         if (hasEntities && file.entities().isPresent()) {
-            entityBytes = buildEntityBlock(file.entities().get(), warningConsumer);
+            entityBytes = buildEntityBlock(file.entities().get());
         }
         if (hasBlockEntities && file.blockEntities().isPresent()) {
-            blockEntityBytes = buildBlockEntityBlock(file.blockEntities().get(), warningConsumer);
+            blockEntityBytes = buildBlockEntityBlock(file.blockEntities().get());
         }
 
         // -- Compute layout: header(48) + meta + palette + layerIndex [+ entities] [+ blockEntities] --
@@ -234,10 +232,7 @@ public final class MsfWriter {
      *
      * <p>UUIDs are stripped from each entity's NBT payload before encoding (Section 8.2).
      */
-    private static byte[] buildEntityBlock(
-        List<MsfEntity> entities,
-        Consumer<MsfWarning> warningConsumer
-    ) {
+    private static byte[] buildEntityBlock(List<MsfEntity> entities) {
         ByteArrayOutputStream body = new ByteArrayOutputStream();
         try {
             writeU32(body, entities.size());    // u32 entity_count
@@ -281,10 +276,7 @@ public final class MsfWriter {
      *
      * <p>UUIDs are stripped from each block entity's NBT payload before encoding (Section 9.2).
      */
-    private static byte[] buildBlockEntityBlock(
-        List<MsfBlockEntity> blockEntities,
-        Consumer<MsfWarning> warningConsumer
-    ) {
+    private static byte[] buildBlockEntityBlock(List<MsfBlockEntity> blockEntities) {
         ByteArrayOutputStream body = new ByteArrayOutputStream();
         try {
             writeU32(body, blockEntities.size());   // u32 block_entity_count

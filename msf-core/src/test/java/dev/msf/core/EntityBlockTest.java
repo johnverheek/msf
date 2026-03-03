@@ -32,18 +32,6 @@ class EntityBlockTest {
     // File assembly helpers
     // =========================================================================
 
-    private static MsfFile minimalFile() throws Exception {
-        return MsfFile.builder()
-            .metadata(MsfMetadata.builder().name("Test").build())
-            .palette(MsfPalette.of(List.of("minecraft:stone")))
-            .layerIndex(MsfLayerIndex.of(List.of(
-                MsfLayer.builder().layerId(1).name("Main")
-                    .addRegion(MsfRegion.builder().name("r").origin(0, 0, 0).size(1, 1, 1).build())
-                    .build()
-            )))
-            .build();
-    }
-
     private static MsfFile fileWithEntity(MsfEntity entity) throws Exception {
         return MsfFile.builder()
             .metadata(MsfMetadata.builder().name("Test").build())

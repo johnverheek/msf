@@ -10,6 +10,8 @@ package dev.msf.core;
  */
 public class MsfCompressionException extends MsfException {
 
+    private static final long serialVersionUID = 1L;
+
     /**
      * Creates a new {@code MsfCompressionException} with the given message.
      *

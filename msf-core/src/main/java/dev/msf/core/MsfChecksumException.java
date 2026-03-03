@@ -16,6 +16,8 @@ package dev.msf.core;
  */
 public class MsfChecksumException extends MsfException {
 
+    private static final long serialVersionUID = 1L;
+
     /** Identifies which checksum failed. */
     public enum ChecksumType {
         /** The header checksum covering bytes 0–39 failed. */

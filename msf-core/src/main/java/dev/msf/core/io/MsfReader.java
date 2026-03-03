@@ -504,8 +504,7 @@ public final class MsfReader {
         ByteBuffer buf = ByteBuffer.wrap(data, offset, data.length - offset)
             .order(ByteOrder.LITTLE_ENDIAN);
 
-        // u32 block_length — read and discard; we locate blocks by absolute offset
-        Integer.toUnsignedLong(buf.getInt());
+        buf.getInt(); // Skip u32 block_length — we locate blocks by absolute offset
 
         // u32 entity_count
         long count = Integer.toUnsignedLong(buf.getInt());
@@ -561,8 +560,7 @@ public final class MsfReader {
         ByteBuffer buf = ByteBuffer.wrap(data, offset, data.length - offset)
             .order(ByteOrder.LITTLE_ENDIAN);
 
-        // u32 block_length — read and discard; we locate blocks by absolute offset
-        Integer.toUnsignedLong(buf.getInt());
+        buf.getInt(); // Skip u32 block_length — we locate blocks by absolute offset
 
         // u32 block_entity_count
         long count = Integer.toUnsignedLong(buf.getInt());
