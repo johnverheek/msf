@@ -6,7 +6,7 @@
 |---------|-------|--------|
 | 1 | Gradle scaffold, exception hierarchy, MsfWarning, MsfHeader, MsfReader/MsfWriter (header only), JUnit 5 tests | Complete |
 | 2 | Global palette, metadata block, layer index, region data (bit packing, all compression types, biome data) | Complete |
-| 3 | Entity block, block entity block, full MsfFile round trip | Not started |
+| 3 | Entity block, block entity block, full MsfFile round trip | Complete |
 
 ## Specification Review Rounds
 
