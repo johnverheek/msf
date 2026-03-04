@@ -155,7 +155,7 @@ Readers encountering a V1.0 file — where the file's minor version equals 0 —
 
 Writers producing V1.0 files MUST mask the feature flags value to bits 0–9 before writing. Writers MUST NOT write a file with any of bits 10–31 set to 1. If a caller provides a feature flags value with reserved bits set, the writer MUST clear those bits and MUST emit a warning via the warning mechanism.
 
-Writers MUST set a feature flag bit if and only if the corresponding optional block is present in the file.
+Writers MUST set feature flag bits 0 and 1 if and only if the corresponding optional block (entity block and block entity block respectively) is present in the file. Feature flag bit 2 governs biome data embedded within region payloads rather than a standalone block; see Section 7.3 for the writer obligations specific to bit 2.
 
 ### 3.4 MC Data Version
 
@@ -444,7 +444,7 @@ u32     Packed array length (count of u64 words)
 u64[]   Packed block data
 ```
 
-When feature flag bit 2 is set, biome data MUST be present in every region payload in the file. Writers MUST NOT set feature flag bit 2 unless they can supply biome data for all regions. Readers MUST expect biome data in every region payload when feature flag bit 2 is set and MUST treat its absence in any region as an MsfParseException. When feature flag bit 2 is not set, no region payload contains biome data and readers MUST NOT attempt to parse it.
+Writers MUST set feature flag bit 2 if biome data is present in any region. Writers MUST NOT set feature flag bit 2 unless biome data is present in all regions. Biome data is all-or-nothing across the file — either all regions carry biome data (bit 2 set) or no regions carry biome data (bit 2 clear). Readers MUST expect biome data in every region payload when feature flag bit 2 is set and MUST treat its absence in any region as an MsfParseException. When feature flag bit 2 is not set, no region payload contains biome data and readers MUST NOT attempt to parse it.
 
 Readers verify biome data presence by checking whether bytes remain in the decompressed payload after consuming the packed block data. If no bytes remain in the decompressed payload at the point where the biome palette entry count u16 should be read, the biome section is absent. Readers MUST throw MsfParseException in this case. Readers MUST NOT silently stop parsing a region payload after the packed block data when biome data is expected — a reader that returns without attempting to read the biome section is non-conforming when feature flag bit 2 is set.
 
@@ -547,11 +547,11 @@ u32     Entity count
 
 ### 8.2 Normative Requirements
 
-**Position and type MUST be stored in typed fields** and MUST NOT be duplicated in the NBT payload. The NBT payload contains only entity-specific data that is not captured by typed fields. The entity type in Minecraft NBT is stored as the `id` tag. Writers MUST NOT include the `id` tag in the NBT payload, as the entity type is already captured in the typed entity type field.
+**Position and type MUST be stored in typed fields** and MUST NOT be duplicated in the NBT payload. The NBT payload contains only entity-specific data that is not captured by typed fields. The entity type in Minecraft NBT is stored as the `id` tag. Writers MUST NOT include the `id` tag in the NBT payload, as the entity type is already captured in the typed entity type field. Readers encountering an `id` tag in an entity NBT payload MUST ignore it. Its presence indicates a non-conforming writer but does not affect parsing. Readers MUST NOT throw MsfParseException solely because excluded tags are present in a payload.
 
-**UUIDs MUST be stripped from all entities** before writing. Writers MUST NOT include UUID data in the NBT payload. Writers MUST strip the entity's own UUID from the NBT payload before writing. UUIDs are stored as an `int[4]` tag named `UUID` in Minecraft 1.16 and later, and as `long` tags named `UUIDMost` and `UUIDLeast` in earlier versions. Writers MUST handle both representations. Owner UUIDs and other relational UUID references stored in entity NBT SHOULD also be stripped, as these references will be invalid in a new world context. Readers generating entities on paste MUST assign a new UUID to the entity itself. Restoring owner UUIDs and relational references is a tool concern beyond the scope of this specification. This requirement prevents UUID collisions when the same schematic is pasted multiple times.
+**UUIDs MUST be stripped from all entities** before writing. Writers MUST NOT include UUID data in the NBT payload. Writers MUST strip the entity's own UUID from the NBT payload before writing. UUIDs are stored as an `int[4]` tag named `UUID` in Minecraft 1.16 and later, and as `long` tags named `UUIDMost` and `UUIDLeast` in earlier versions. Writers MUST handle both representations. Owner UUIDs and other relational UUID references stored in entity NBT — such as tame owner UUIDs, leash holder UUIDs, and anger target UUIDs — SHOULD also be stripped, as these references will be invalid in a new world context. Readers generating entities on paste MUST assign a new UUID to the entity itself. Restoring owner UUIDs and relational references is a tool concern beyond the scope of this specification. This requirement prevents UUID collisions when the same schematic is pasted multiple times.
 
-**Entity count MUST be at least 1.** Writers MUST NOT write an entity block with an entity count of 0. If a writer has no entities to write, it MUST NOT set feature flag bit 0 and MUST NOT write an entity block. Readers encountering an entity block with an entity count of 0 MUST emit a FEATURE_FLAG_CONFLICT warning and MUST continue parsing — this indicates a non-conforming writer.
+**Entity count MUST be at least 1.** Writers MUST NOT write an entity block with an entity count of 0. If a writer has no entities to write, it MUST NOT set feature flag bit 0 and MUST NOT write an entity block. Readers encountering an entity block with an entity count of 0 MUST emit a FEATURE_FLAG_CONFLICT warning, MUST treat the entity block as absent, and MUST continue parsing the remainder of the file. This indicates a non-conforming writer.
 
 **Entity count is a u32.** No maximum below the u32 ceiling is imposed by this field. The effective maximum number of entities is bounded by the u32 block length field, which limits the entity block to 4,294,967,295 bytes total. Writers MUST NOT produce an entity block whose total byte length exceeds this limit, consistent with Section 3.6.
 
@@ -579,11 +579,11 @@ u32     Block entity count
 
 ### 9.2 Normative Requirements
 
-**Position and type MUST be stored in typed fields** and MUST NOT be duplicated in the NBT payload. The block entity type in Minecraft NBT is stored as the `id` tag. Writers MUST NOT include the `id` tag in the NBT payload, as the block entity type is already captured in the typed block entity type field. Position coordinates are similarly excluded — writers MUST NOT include `x`, `y`, or `z` position tags in the NBT payload.
+**Position and type MUST be stored in typed fields** and MUST NOT be duplicated in the NBT payload. The block entity type in Minecraft NBT is stored as the `id` tag. Writers MUST NOT include the `id` tag in the NBT payload, as the block entity type is already captured in the typed block entity type field. Position coordinates are similarly excluded — writers MUST NOT include `x`, `y`, or `z` position tags in the NBT payload. Readers encountering `id`, `x`, `y`, or `z` tags in a block entity NBT payload MUST ignore them. Their presence indicates a non-conforming writer but does not affect parsing. Readers MUST NOT throw MsfParseException solely because excluded tags are present in a payload.
 
 **UUIDs MUST be stripped** from block entity NBT payloads. Writers MUST strip UUIDs from block entity NBT payloads before writing, handling both the `int[4]` tag named `UUID` used in Minecraft 1.16 and later and the `long` tags named `UUIDMost` and `UUIDLeast` used in earlier versions. Readers generating block entities on paste MUST NOT preserve any UUID data from the payload. The rationale and full scoping of this requirement are stated in Section 8.2.
 
-**Block entity count MUST be at least 1.** Writers MUST NOT write a block entity block with a block entity count of 0. If a writer has no block entities to write, it MUST NOT set feature flag bit 1 and MUST NOT write a block entity block. Readers encountering a block entity block with a block entity count of 0 MUST emit a FEATURE_FLAG_CONFLICT warning and MUST continue parsing — this indicates a non-conforming writer.
+**Block entity count MUST be at least 1.** Writers MUST NOT write a block entity block with a block entity count of 0. If a writer has no block entities to write, it MUST NOT set feature flag bit 1 and MUST NOT write a block entity block. Readers encountering a block entity block with a block entity count of 0 MUST emit a FEATURE_FLAG_CONFLICT warning, MUST treat the block entity block as absent, and MUST continue parsing the remainder of the file. This indicates a non-conforming writer.
 
 **Block entity count is a u32.** No maximum below the u32 ceiling is imposed by this field. The effective maximum number of block entities is bounded by the u32 block length field, which limits the block entity block to 4,294,967,295 bytes total. Writers MUST NOT produce a block entity block whose total byte length exceeds this limit, consistent with Section 3.6.
 
@@ -671,7 +671,7 @@ This is the foundational rule from which all other versioning rules derive. Its 
 
 Specifically:
 
-**Feature flag bits are never reassigned.** A bit assigned meaning in any minor version retains that meaning permanently. Reserved bits may be assigned meaning in future minor versions but MUST NOT be given meaning that conflicts with their previously reserved status of being ignored.
+**Feature flag bits are never reassigned.** A bit assigned meaning in any minor version retains that meaning permanently. Reserved bits MAY be assigned meaning in future minor versions but MUST NOT be given meaning that conflicts with their previously reserved status of being ignored.
 
 **Block types are never removed.** A block type defined in any minor version of the V1 specification MUST remain parseable in all future V1 minor versions. The block length prefix guarantees that readers can always skip unknown blocks mechanically — this mechanism exists precisely to support forward compatibility.
 
