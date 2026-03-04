@@ -1,0 +1,112 @@
+package dev.msf.fabric.test;
+
+import dev.msf.core.MsfParseException;
+import dev.msf.core.model.MsfBlockEntity;
+import dev.msf.fabric.bridge.BlockEntityBridge;
+import net.fabricmc.fabric.api.gametest.v1.FabricGameTest;
+import net.minecraft.block.Blocks;
+import net.minecraft.block.entity.BlockEntity;
+import net.minecraft.test.GameTest;
+import net.minecraft.test.TestContext;
+import net.minecraft.util.math.BlockPos;
+
+/**
+ * Gametests for {@link BlockEntityBridge} — NBT extraction and application.
+ */
+public class BlockEntityBridgeTest implements FabricGameTest {
+
+    @GameTest(templateName = EMPTY_STRUCTURE)
+    public void fromBlockEntityCapturesType(TestContext ctx) {
+        ctx.setBlockState(1, 1, 1, Blocks.CHEST.getDefaultState());
+
+        BlockPos worldPos = ctx.getAbsolutePos(new BlockPos(1, 1, 1));
+        BlockPos anchor   = ctx.getAbsolutePos(BlockPos.ORIGIN);
+
+        BlockEntity be = ctx.getWorld().getBlockEntity(worldPos);
+        ctx.assertTrue(be != null, "Chest must have a block entity");
+
+        MsfBlockEntity msfBe = BlockEntityBridge.fromBlockEntity(be, anchor);
+        ctx.assertTrue("minecraft:chest".equals(msfBe.blockEntityType()),
+            "Expected type minecraft:chest, got " + msfBe.blockEntityType());
+        ctx.complete();
+    }
+
+    @GameTest(templateName = EMPTY_STRUCTURE)
+    public void fromBlockEntityRecordsRelativePosition(TestContext ctx) {
+        ctx.setBlockState(2, 1, 3, Blocks.CHEST.getDefaultState());
+
+        BlockPos worldPos = ctx.getAbsolutePos(new BlockPos(2, 1, 3));
+        BlockPos anchor   = ctx.getAbsolutePos(BlockPos.ORIGIN);
+
+        BlockEntity be = ctx.getWorld().getBlockEntity(worldPos);
+        ctx.assertTrue(be != null, "Chest must have a block entity");
+
+        MsfBlockEntity msfBe = BlockEntityBridge.fromBlockEntity(be, anchor);
+        ctx.assertEquals(2, msfBe.positionX(), "positionX");
+        ctx.assertEquals(1, msfBe.positionY(), "positionY");
+        ctx.assertEquals(3, msfBe.positionZ(), "positionZ");
+        ctx.complete();
+    }
+
+    @GameTest(templateName = EMPTY_STRUCTURE)
+    public void applyToWorldSilentlySkipsNullBlockEntity(TestContext ctx) throws MsfParseException {
+        // Position has no block entity placed — applyToWorld must not throw
+        BlockPos worldPos = ctx.getAbsolutePos(new BlockPos(1, 1, 1));
+        MsfBlockEntity msfBe = MsfBlockEntity.builder()
+            .position(1, 1, 1)
+            .blockEntityType("minecraft:chest")
+            .nbtPayload(null)
+            .build();
+
+        // No block entity exists at this position — must silently return
+        BlockEntityBridge.applyToWorld(msfBe, ctx.getWorld(), worldPos);
+        ctx.complete();
+    }
+
+    @GameTest(templateName = EMPTY_STRUCTURE)
+    public void applyEmptyPayloadIsNoOp(TestContext ctx) throws MsfParseException {
+        ctx.setBlockState(1, 1, 1, Blocks.CHEST.getDefaultState());
+
+        BlockPos worldPos = ctx.getAbsolutePos(new BlockPos(1, 1, 1));
+        MsfBlockEntity msfBe = MsfBlockEntity.builder()
+            .position(1, 1, 1)
+            .blockEntityType("minecraft:chest")
+            .nbtPayload(new byte[0])
+            .build();
+
+        // Empty payload must not throw
+        BlockEntityBridge.applyToWorld(msfBe, ctx.getWorld(), worldPos);
+        ctx.complete();
+    }
+
+    @GameTest(templateName = EMPTY_STRUCTURE)
+    public void extractAndApplyRoundTrip(TestContext ctx) throws MsfParseException {
+        // Place source chest
+        ctx.setBlockState(1, 1, 1, Blocks.CHEST.getDefaultState());
+        // Place target chest to receive NBT
+        ctx.setBlockState(3, 1, 1, Blocks.CHEST.getDefaultState());
+
+        BlockPos srcWorld    = ctx.getAbsolutePos(new BlockPos(1, 1, 1));
+        BlockPos targetWorld = ctx.getAbsolutePos(new BlockPos(3, 1, 1));
+        BlockPos anchor      = ctx.getAbsolutePos(BlockPos.ORIGIN);
+
+        BlockEntity srcBe = ctx.getWorld().getBlockEntity(srcWorld);
+        ctx.assertTrue(srcBe != null, "Source chest must have a block entity");
+
+        MsfBlockEntity msfBe = BlockEntityBridge.fromBlockEntity(srcBe, anchor);
+
+        // Re-build record with target position
+        MsfBlockEntity targetRecord = MsfBlockEntity.builder()
+            .position(3, 1, 1)
+            .blockEntityType(msfBe.blockEntityType())
+            .nbtPayload(msfBe.nbtPayload())
+            .build();
+
+        BlockEntityBridge.applyToWorld(targetRecord, ctx.getWorld(), targetWorld);
+
+        // Target chest block entity must still exist after NBT application
+        ctx.assertTrue(ctx.getWorld().getBlockEntity(targetWorld) != null,
+            "Target block entity must still exist after applyToWorld");
+        ctx.complete();
+    }
+}

@@ -6,7 +6,10 @@ package dev.msf.fabric.world;
  * @param skipAir            when {@code true}, air blocks in the region do not overwrite
  *                           existing world blocks; when {@code false}, all blocks including
  *                           air are placed unconditionally
- * @param placeBlockEntities placeholder for Session 5 — block entities are not placed yet
+ * @param placeBlockEntities when {@code true}, block entity NBT payloads are applied
+ *                           after all blocks have been placed (two-phase placement)
+ * @param spawnEntities      when {@code true}, entities from the MSF entity block are
+ *                           spawned into the world after block placement
  * @param canonicalFacing    the facing direction the schematic was authored in,
  *                           sourced from {@link dev.msf.core.model.MsfMetadata#canonicalFacing()}
  * @param targetFacing       the facing direction to use when placing; rotation transform
@@ -16,17 +19,18 @@ package dev.msf.fabric.world;
 public record PlacementOptions(
     boolean skipAir,
     boolean placeBlockEntities,
+    boolean spawnEntities,
     CanonicalFacing canonicalFacing,
     CanonicalFacing targetFacing
 ) {
 
-    /** Places all blocks with no rotation and without skipping air. */
+    /** Places all blocks with no rotation, without skipping air, with entities and block entities. */
     public static final PlacementOptions DEFAULT = new PlacementOptions(
-        false, false, CanonicalFacing.NORTH, CanonicalFacing.NORTH
+        false, true, true, CanonicalFacing.NORTH, CanonicalFacing.NORTH
     );
 
-    /** Places all blocks with no rotation but skips air. */
+    /** Places all blocks with no rotation, skips air, with entities and block entities. */
     public static final PlacementOptions SKIP_AIR = new PlacementOptions(
-        true, false, CanonicalFacing.NORTH, CanonicalFacing.NORTH
+        true, true, true, CanonicalFacing.NORTH, CanonicalFacing.NORTH
     );
 }

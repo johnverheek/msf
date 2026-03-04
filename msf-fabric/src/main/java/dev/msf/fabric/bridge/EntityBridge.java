@@ -156,7 +156,7 @@ public final class EntityBridge {
 
     private static NbtCompound nbtFromBytes(byte[] bytes) throws IOException {
         try (DataInputStream dis = new DataInputStream(new ByteArrayInputStream(bytes))) {
-            return NbtIo.readCompound(dis, NbtSizeTracker.ofBytes(MAX_NBT_READ_BYTES));
+            return NbtIo.readCompound(dis, NbtSizeTracker.of(MAX_NBT_READ_BYTES));
         }
     }
 }

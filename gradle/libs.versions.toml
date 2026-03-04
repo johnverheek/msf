@@ -4,8 +4,10 @@ zstd = "1.5.5-11"
 brotli = "0.1.2"
 junit = "5.10.0"
 minecraft = "1.21.1"
+yarn = "1.21.1+build.3"
 fabricLoader = "0.16.5"
 fabricApi = "0.102.0+1.21.1"
+fabricLoom = "1.7.4"
 
 [libraries]
 lz4 = { module = "org.lz4:lz4-java", version.ref = "lz4" }
@@ -14,4 +16,4 @@ brotli = { module = "org.brotli:dec", version.ref = "brotli" }
 junit-jupiter = { module = "org.junit.jupiter:junit-jupiter", version.ref = "junit" }
 
 [plugins]
-# No custom plugins in V1
+fabricLoom = { id = "fabric-loom", version.ref = "fabricLoom" }

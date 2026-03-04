@@ -3,6 +3,7 @@ package dev.msf.fabric.world;
 import dev.msf.core.MsfParseException;
 import dev.msf.core.MsfPaletteException;
 import dev.msf.core.model.MsfBlockEntity;
+import dev.msf.core.model.MsfEntity;
 import dev.msf.core.model.MsfFile;
 import dev.msf.core.model.MsfLayer;
 import dev.msf.core.model.MsfPalette;
@@ -10,8 +11,10 @@ import dev.msf.core.model.MsfRegion;
 import dev.msf.core.util.YzxOrder;
 import dev.msf.fabric.bridge.BlockEntityBridge;
 import dev.msf.fabric.bridge.BlockStateBridge;
+import dev.msf.fabric.bridge.EntityBridge;
 import net.minecraft.block.Block;
 import net.minecraft.block.BlockState;
+import net.minecraft.entity.Entity;
 import net.minecraft.util.BlockRotation;
 import net.minecraft.util.math.BlockPos;
 import net.minecraft.server.world.ServerWorld;
@@ -37,6 +40,10 @@ import net.minecraft.server.world.ServerWorld;
  * {@link #place(MsfFile, ServerWorld, BlockPos, PlacementOptions)} places ALL blocks
  * across all regions first, then applies block entity NBT. This satisfies the precondition
  * that the target block must already exist before NBT can be loaded.
+ *
+ * <h2>Entity spawning</h2>
+ * When {@link PlacementOptions#spawnEntities()} is {@code true} and the file has an entity
+ * block, entities are spawned after all blocks and block entities have been placed.
  */
 public final class RegionPlacer {
 
@@ -59,9 +66,10 @@ public final class RegionPlacer {
      * @param file      the MSF file to place
      * @param world     the target world
      * @param anchorPos the world position corresponding to the schematic anchor
-     * @param options   placement options (air skip, rotation, block entities)
+     * @param options   placement options (air skip, rotation, block entities, entities)
      * @throws MsfPaletteException if block data palette IDs are invalid
-     * @throws MsfParseException   if block entity NBT cannot be deserialized
+     * @throws MsfParseException   if block entity NBT cannot be deserialized, or an
+     *                             entity type is unknown
      */
     public static void place(
         MsfFile file,
@@ -89,6 +97,15 @@ public final class RegionPlacer {
                     anchorPos.getZ() + rotXZ[1]
                 );
                 BlockEntityBridge.applyToWorld(msfBe, world, worldPos);
+            }
+        }
+
+        // Phase 3: spawn entities
+        if (options.spawnEntities() && file.entities().isPresent()) {
+            BlockPos entityAnchor = anchorPos;
+            for (MsfEntity msfEntity : file.entities().get()) {
+                Entity entity = EntityBridge.toEntity(msfEntity, world, entityAnchor);
+                world.spawnEntity(entity);
             }
         }
     }

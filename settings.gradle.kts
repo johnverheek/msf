@@ -3,6 +3,9 @@ pluginManagement {
         maven("https://maven.fabricmc.net")
         gradlePluginPortal()
     }
+    plugins {
+        id("fabric-loom") version "1.7.4"
+    }
 }
 
 rootProject.name = "msf"

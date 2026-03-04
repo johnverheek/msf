@@ -1,0 +1,25 @@
+{
+  "schemaVersion": 1,
+  "id": "msf-testmod",
+  "version": "1.0.0",
+  "name": "MSF Test Mod",
+  "description": "Gametest suite for the MSF Fabric bridge",
+  "authors": [],
+  "license": "MIT",
+  "environment": "*",
+  "entrypoints": {
+    "fabric-gametest": [
+      "dev.msf.fabric.test.BlockStateBridgeTest",
+      "dev.msf.fabric.test.RegionExtractorTest",
+      "dev.msf.fabric.test.RegionPlacerTest",
+      "dev.msf.fabric.test.BlockEntityBridgeTest",
+      "dev.msf.fabric.test.DataVersionCheckerTest",
+      "dev.msf.fabric.test.FullRoundTripTest"
+    ]
+  },
+  "depends": {
+    "fabricloader": ">=0.16.5",
+    "fabric-api": "*",
+    "minecraft": "1.21.1"
+  }
+}

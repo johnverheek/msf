@@ -49,9 +49,9 @@ SCRIPT_DIR=$( cd -- "$( dirname -- "$0" )" && pwd -P )
 APP_HOME=$( cd -- "$SCRIPT_DIR/.." && pwd -P )
 APP_NAME="Gradle"
 APP_JAR="gradle-wrapper.jar"
-WRAPPER_PROPERTIES="$SCRIPT_DIR/gradle-wrapper.properties"
-GRADLE_HOME="$APP_HOME/.gradle"
-GRADLE_VERSION="8.5"
+WRAPPER_PROPERTIES="$SCRIPT_DIR/gradle/wrapper/gradle-wrapper.properties"
+GRADLE_VERSION="8.8"
+GRADLE_HOME="$APP_HOME/.gradle-$GRADLE_VERSION"
 GRADLE_URL="https://services.gradle.org/distributions/gradle-${GRADLE_VERSION}-bin.zip"
 
 symlink_resolve() {
@@ -74,7 +74,7 @@ if [ ! -f "$GRADLE_ZIP" ]; then
     curl -L "$GRADLE_URL" -o "$GRADLE_ZIP"
 fi
 
-GRADLE_HOME="$APP_HOME/.gradle"
+GRADLE_HOME="$APP_HOME/.gradle-$GRADLE_VERSION"
 if [ ! -d "$GRADLE_HOME" ]; then
     mkdir -p "$GRADLE_HOME"
     unzip -q "$GRADLE_ZIP" -d "$GRADLE_HOME"
