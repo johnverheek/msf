@@ -1,9 +1,14 @@
 package dev.msf.fabric.world;
 
+import dev.msf.core.MsfParseException;
 import dev.msf.core.MsfPaletteException;
+import dev.msf.core.model.MsfBlockEntity;
+import dev.msf.core.model.MsfFile;
+import dev.msf.core.model.MsfLayer;
 import dev.msf.core.model.MsfPalette;
 import dev.msf.core.model.MsfRegion;
 import dev.msf.core.util.YzxOrder;
+import dev.msf.fabric.bridge.BlockEntityBridge;
 import dev.msf.fabric.bridge.BlockStateBridge;
 import net.minecraft.block.Block;
 import net.minecraft.block.BlockState;
@@ -12,7 +17,8 @@ import net.minecraft.util.math.BlockPos;
 import net.minecraft.server.world.ServerWorld;
 
 /**
- * Places {@link MsfRegion} block data into a {@link ServerWorld}.
+ * Places {@link MsfRegion} block data (and optionally block entities) into a
+ * {@link ServerWorld}.
  *
  * <h2>Air handling</h2>
  * Air blocks (palette ID 0) are placed unconditionally unless
@@ -25,13 +31,70 @@ import net.minecraft.server.world.ServerWorld;
  * uses Minecraft's own property-API-based implementation for all direction-dependent
  * properties (facing, stair shape, trapdoor half, piston/observer facing, etc.).
  * Positions are rotated around the anchor using standard 2D rotation formulas.
+ *
+ * <h2>Block entity ordering</h2>
+ * When {@link PlacementOptions#placeBlockEntities()} is {@code true},
+ * {@link #place(MsfFile, ServerWorld, BlockPos, PlacementOptions)} places ALL blocks
+ * across all regions first, then applies block entity NBT. This satisfies the precondition
+ * that the target block must already exist before NBT can be loaded.
  */
 public final class RegionPlacer {
 
     private RegionPlacer() {}
 
     // =========================================================================
-    // place
+    // place — file level
+    // =========================================================================
+
+    /**
+     * Places all blocks from every region in every layer of {@code file} into
+     * {@code world}, then — if {@link PlacementOptions#placeBlockEntities()} is
+     * {@code true} and the file has a block entity block — applies block entity NBT
+     * to the already-placed blocks.
+     *
+     * <p>Block entities are applied AFTER all block data has been placed so that
+     * {@link BlockEntityBridge#applyToWorld} always finds an existing block entity at
+     * the target position.
+     *
+     * @param file      the MSF file to place
+     * @param world     the target world
+     * @param anchorPos the world position corresponding to the schematic anchor
+     * @param options   placement options (air skip, rotation, block entities)
+     * @throws MsfPaletteException if block data palette IDs are invalid
+     * @throws MsfParseException   if block entity NBT cannot be deserialized
+     */
+    public static void place(
+        MsfFile file,
+        ServerWorld world,
+        BlockPos anchorPos,
+        PlacementOptions options
+    ) throws MsfPaletteException, MsfParseException {
+        MsfPalette globalPalette = file.palette();
+        BlockRotation rotation = computeRotation(options.canonicalFacing(), options.targetFacing());
+
+        // Phase 1: place all blocks across all layers and regions
+        for (MsfLayer layer : file.layerIndex().layers()) {
+            for (MsfRegion region : layer.regions()) {
+                placeBlocks(region, globalPalette, world, anchorPos, options, rotation);
+            }
+        }
+
+        // Phase 2: apply block entity NBT (blocks must already be placed — see class Javadoc)
+        if (options.placeBlockEntities() && file.blockEntities().isPresent()) {
+            for (MsfBlockEntity msfBe : file.blockEntities().get()) {
+                int[] rotXZ = rotatePosition(msfBe.positionX(), msfBe.positionZ(), rotation);
+                BlockPos worldPos = new BlockPos(
+                    anchorPos.getX() + rotXZ[0],
+                    anchorPos.getY() + msfBe.positionY(),
+                    anchorPos.getZ() + rotXZ[1]
+                );
+                BlockEntityBridge.applyToWorld(msfBe, world, worldPos);
+            }
+        }
+    }
+
+    // =========================================================================
+    // place — region level
     // =========================================================================
 
     /**
@@ -55,13 +118,32 @@ public final class RegionPlacer {
         BlockPos anchorPos,
         PlacementOptions options
     ) throws MsfPaletteException {
+        placeBlocks(region, globalPalette, world, anchorPos, options,
+            computeRotation(options.canonicalFacing(), options.targetFacing()));
+    }
+
+    // =========================================================================
+    // Internal helpers
+    // =========================================================================
+
+    /**
+     * Inner placement loop — places blocks for one region with a pre-computed rotation.
+     * Called by both public {@code place} overloads so the rotation is computed only once
+     * when placing a multi-region file.
+     */
+    private static void placeBlocks(
+        MsfRegion region,
+        MsfPalette globalPalette,
+        ServerWorld world,
+        BlockPos anchorPos,
+        PlacementOptions options,
+        BlockRotation rotation
+    ) throws MsfPaletteException {
         int sizeX = region.sizeX();
         int sizeY = region.sizeY();
         int sizeZ = region.sizeZ();
         int[] blockData = region.blockData();
         int paletteSize = globalPalette.entries().size();
-
-        BlockRotation rotation = computeRotation(options.canonicalFacing(), options.targetFacing());
 
         for (int y = 0; y < sizeY; y++) {
             for (int z = 0; z < sizeZ; z++) {

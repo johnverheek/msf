@@ -143,19 +143,21 @@ Bit 3:   Has lighting hints
 Bit 4:   Multi-region
 Bit 5:   Delta/diff format
 Bit 6:   Has signal ports
-Bit 7:   Has construction layers
+Bit 7:   Reserved in V1.0 — extended construction layers (not yet defined)
 Bit 8:   Has variant system
 Bit 9:   Has palette substitution rules
 Bit 10–31: Reserved, MUST be 0 in V1.0
 ```
 
-Readers MUST NOT reject a file solely because a feature flag bit is set that the reader does not support. Readers MUST skip blocks associated with unsupported feature flags using the block length field at the start of each block.
+Readers MUST NOT reject a file solely because a feature flag bit is set that the reader does not support. Readers MUST skip blocks associated with unsupported feature flags using the block length field at the start of each block. Feature flag bit 2 is an exception to this skip mechanism — biome data is embedded within region payloads rather than stored as a standalone block with a header offset field; readers that do not support biome data simply do not parse the trailing bytes of each region payload. Section 7.3 defines the writer obligations and reader expectations specific to bit 2.
 
-Readers encountering a V1.0 file — where the file's minor version equals 0 — with any of bits 10–31 set MUST emit a warning identifying which reserved bits are set, as this indicates a non-conforming writer. Readers encountering a file whose minor version exceeds the reader's implemented minor version MUST NOT warn on reserved bits, as those bits may carry defined meaning in a later minor version the reader does not implement.
+Readers encountering a V1.0 file — where the file's minor version equals 0 — with any of bits 7–31 set MUST emit a RESERVED_FLAG_SET warning identifying which reserved bits are set, as this indicates a non-conforming writer. Readers encountering a file whose minor version exceeds the reader's implemented minor version MUST NOT warn on reserved bits, as those bits may carry defined meaning in a later minor version the reader does not implement.
 
-Writers producing V1.0 files MUST mask the feature flags value to bits 0–9 before writing. Writers MUST NOT write a file with any of bits 10–31 set to 1. If a caller provides a feature flags value with reserved bits set, the writer MUST clear those bits and MUST emit a warning via the warning mechanism.
+Writers producing V1.0 files MUST mask the feature flags value to bits 0–6 and bits 8–9 before writing. Writers MUST NOT set bit 7 in V1.0 files. Writers MUST NOT write a file with any of bits 7 or 10–31 set to 1. If a caller provides a feature flags value with reserved bits set, the writer MUST clear those bits and MUST emit a RESERVED_FLAG_CLEARED warning via the warning mechanism.
 
 Writers MUST set feature flag bits 0 and 1 if and only if the corresponding optional block (entity block and block entity block respectively) is present in the file. Feature flag bit 2 governs biome data embedded within region payloads rather than a standalone block; see Section 7.3 for the writer obligations specific to bit 2.
+
+Feature flag bit 7 is reserved in V1.0. The layer index block defined in Section 6 is required in all MSF files regardless of this flag — it is not gated by bit 7. Bit 7 is reserved for a future extended construction layer block not yet defined in this version of the specification. Readers encountering bit 7 set in a V1.0 file MUST emit a RESERVED_FLAG_SET warning.
 
 ### 3.4 MC Data Version
 
@@ -185,7 +187,7 @@ Defined warning codes and the conditions that trigger them:
 
 |Code                     |Condition                                                                                                                                  |
 |-------------------------|-------------------------------------------------------------------------------------------------------------------------------------------|
-|`RESERVED_FLAG_SET`      |Reader detected reserved bits set — feature flag bits 10–31 in a V1.0 file (Section 3.3), or rotation compatibility bits 5–7 (Section 10.3)|
+|`RESERVED_FLAG_SET`      |Reader detected reserved bits set — feature flag bits 7–31 in a V1.0 file (Section 3.3), or rotation compatibility bits 5–7 (Section 10.3)|
 |`RESERVED_FLAG_CLEARED`  |Writer cleared reserved bits provided by caller — applies to feature flags (Section 3.3) and rotation compatibility (Section 10.3)         |
 |`FILE_SIZE_MISMATCH`     |Actual file length does not match the file_size field (Section 3.6)                                                                        |
 |`FILE_CHECKSUM_FAILURE`  |File checksum verification failed (Section 11)                                                                                             |
@@ -249,7 +251,7 @@ u8[]    Blockstate string (UTF-8, not null terminated)
 
 **Palette ID 0 MUST be AIR.** The string value of palette entry 0 MUST be `minecraft:air`. This is a format invariant. Writers MUST always write `minecraft:air` as the first palette entry regardless of whether air appears in the block data. Readers MUST treat palette ID 0 as air without reading the string value.
 
-**Palette entries MUST be deduplicated.** No two entries in the palette may represent the same blockstate. Writers MUST check for duplicates before writing and MUST throw MsfPaletteException if the input contains duplicate blockstate strings, identifying the duplicated string. Readers encountering duplicate palette entries MUST throw MsfParseException. A duplicate palette entry indicates a non-conforming writer and the palette cannot be trusted to correctly map block IDs to blockstate strings. Silent deduplication by readers is not permitted.
+**Palette entries MUST be deduplicated.** All palette entries MUST represent distinct blockstate strings. Writers MUST check for duplicates before writing and MUST throw MsfPaletteException if the input contains duplicate blockstate strings, identifying the duplicated string. Readers encountering duplicate palette entries MUST throw MsfParseException. A duplicate palette entry indicates a non-conforming writer and the palette cannot be trusted to correctly map block IDs to blockstate strings. Silent deduplication by readers is not permitted.
 
 **Writers MUST follow canonical Minecraft property ordering within blockstate strings.** Writers MUST NOT reorder properties alphabetically or by any other scheme. Properties within a blockstate string MUST appear in the order they are registered in Minecraft's BlockStateDefinition for that block as of the MC data version declared in the header.
 
@@ -353,6 +355,8 @@ The layer index defines the semantic construction layers of the schematic. Layer
 Layers represent distinct construction phases such as terrain clearing, foundation, frame, exterior, interior, detailing, and landscaping. The format defines what layers exist and what blocks belong to each. Tools define how layers are visualized and interacted with.
 
 Viewport slicing is a tool feature. Semantic layers are a format feature. These are distinct concerns and MUST NOT be conflated.
+
+Feature flag bit 7 ("Has construction layers") is reserved in V1.0. The layer index block is required unconditionally in all MSF files and is not gated by bit 7. Bit 7 is reserved for a future extended construction layer block not yet defined in this version of the specification.
 
 ### 6.2 Layout
 
@@ -616,7 +620,7 @@ Canonical facing declares the cardinal direction the schematic was authored to f
 
 Any value other than 0x00–0x03 is invalid. Readers encountering an invalid canonical facing value MUST throw MsfParseException. Writers MUST validate the canonical facing value before writing. If given a value other than 0x00–0x03, writers MUST throw IllegalArgumentException identifying the field name and the value provided.
 
-Tools derive rotation and mirror transformations from canonical facing when placing the schematic in a different orientation. Tools MUST transform all direction-dependent blockstate properties — including but not limited to facing, shape, and half properties on stairs, trapdoors, pistons, observers, and repeaters — when applying rotation or mirror.
+Rotation is computed as the angular delta between the canonical facing declared in the schematic and the target facing requested at placement time. Tools MUST read the canonical facing from the schematic before computing any rotation or mirror transformation. The canonical facing is the reference direction from which all rotation deltas are measured. Tools MUST transform all direction-dependent blockstate properties — including but not limited to facing, shape, and half properties on stairs, trapdoors, pistons, observers, and repeaters — when applying rotation or mirror.
 
 ### 10.3 Rotation Compatibility
 
