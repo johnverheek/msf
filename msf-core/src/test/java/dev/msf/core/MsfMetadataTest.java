@@ -5,6 +5,7 @@ import dev.msf.core.model.MsfMetadata.FunctionalVolume;
 import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -356,6 +357,177 @@ class MsfMetadataTest {
     @Test
     void name_emptyThrowsIllegalArgument() {
         assertThrows(IllegalArgumentException.class, () -> MsfMetadata.builder().name("").build());
+    }
+
+    // -------------------------------------------------------------------------
+    // Trailing fields — V1_L
+    // -------------------------------------------------------------------------
+
+    @Test
+    void trailingFields_allPresent_roundTrip() throws Exception {
+        MsfMetadata original = MsfMetadata.builder()
+                .name("Tool test")
+                .toolName("StructureForge")
+                .toolVersion("2.5.0")
+                .recommendedPlacementMode(MsfMetadata.PLACEMENT_MODE_FUNCTIONAL)
+                .mcEdition(MsfMetadata.EDITION_JAVA)
+                .build();
+
+        byte[] bytes = original.toBytes(null);
+        MsfMetadata parsed = MsfMetadata.fromBytes(bytes, 0, null);
+
+        assertEquals("StructureForge", parsed.toolName());
+        assertEquals("2.5.0", parsed.toolVersion());
+        assertEquals(MsfMetadata.PLACEMENT_MODE_FUNCTIONAL, parsed.recommendedPlacementMode());
+        assertEquals(MsfMetadata.EDITION_JAVA, parsed.mcEdition());
+    }
+
+    @Test
+    void trailingFields_absent_defaultsApplied() throws Exception {
+        // Simulate an old file with no trailing fields by truncating them from the bytes.
+        MsfMetadata base = MsfMetadata.builder().name("Old file").build();
+        byte[] full = base.toBytes(null);
+        // The trailing section for default values is: str("") + str("") + u8 + u8 = 2+2+1+1 = 6 bytes
+        byte[] oldFile = truncateBlockBody(full, 6);
+
+        MsfMetadata parsed = MsfMetadata.fromBytes(oldFile, 0, null);
+
+        assertEquals("", parsed.toolName());
+        assertEquals("", parsed.toolVersion());
+        assertEquals(MsfMetadata.PLACEMENT_MODE_UNSPECIFIED, parsed.recommendedPlacementMode());
+        assertEquals(MsfMetadata.EDITION_UNKNOWN, parsed.mcEdition());
+    }
+
+    @Test
+    void trailingFields_partial_onlyStringsPresent_u8sDefault() throws Exception {
+        // Simulate a file that has toolName + toolVersion but not the two u8 trailing fields.
+        MsfMetadata base = MsfMetadata.builder()
+                .name("Partial")
+                .toolName("SomeTool")
+                .toolVersion("1.0")
+                .build();
+        byte[] full = base.toBytes(null);
+        // Remove last 2 bytes (recommendedPlacementMode + mcEdition)
+        byte[] partial = truncateBlockBody(full, 2);
+
+        MsfMetadata parsed = MsfMetadata.fromBytes(partial, 0, null);
+
+        assertEquals("SomeTool", parsed.toolName());
+        assertEquals("1.0", parsed.toolVersion());
+        assertEquals(MsfMetadata.PLACEMENT_MODE_UNSPECIFIED, parsed.recommendedPlacementMode());
+        assertEquals(MsfMetadata.EDITION_UNKNOWN, parsed.mcEdition());
+    }
+
+    @Test
+    void trailingFields_editionMismatch_bedrockEmitsWarning() throws Exception {
+        MsfMetadata meta = MsfMetadata.builder()
+                .name("Bedrock file")
+                .mcEdition(MsfMetadata.EDITION_BEDROCK)
+                .build();
+        byte[] bytes = meta.toBytes(null);
+
+        List<MsfWarning> warnings = new ArrayList<>();
+        MsfMetadata.fromBytes(bytes, 0, warnings::add);
+
+        assertTrue(warnings.stream().anyMatch(w -> w.code() == MsfWarning.Code.EDITION_MISMATCH),
+                "Expected EDITION_MISMATCH warning for Bedrock edition");
+    }
+
+    @Test
+    void trailingFields_editionJava_noWarning() throws Exception {
+        MsfMetadata meta = MsfMetadata.builder()
+                .name("Java file")
+                .mcEdition(MsfMetadata.EDITION_JAVA)
+                .build();
+        byte[] bytes = meta.toBytes(null);
+
+        List<MsfWarning> warnings = new ArrayList<>();
+        MsfMetadata.fromBytes(bytes, 0, warnings::add);
+
+        assertFalse(warnings.stream().anyMatch(w -> w.code() == MsfWarning.Code.EDITION_MISMATCH),
+                "No EDITION_MISMATCH expected for Java edition");
+    }
+
+    @Test
+    void trailingFields_editionUnknown_noWarning() throws Exception {
+        MsfMetadata meta = MsfMetadata.builder()
+                .name("Unknown edition")
+                .mcEdition(MsfMetadata.EDITION_UNKNOWN)
+                .build();
+        byte[] bytes = meta.toBytes(null);
+
+        List<MsfWarning> warnings = new ArrayList<>();
+        MsfMetadata.fromBytes(bytes, 0, warnings::add);
+
+        assertFalse(warnings.stream().anyMatch(w -> w.code() == MsfWarning.Code.EDITION_MISMATCH),
+                "No EDITION_MISMATCH expected for unknown edition");
+    }
+
+    @Test
+    void trailingFields_absent_noEditionWarning() throws Exception {
+        // Old file with no trailing fields — no EDITION_MISMATCH because field is absent
+        MsfMetadata base = MsfMetadata.builder().name("Old").build();
+        byte[] oldFile = truncateBlockBody(base.toBytes(null), 6);
+
+        List<MsfWarning> warnings = new ArrayList<>();
+        MsfMetadata.fromBytes(oldFile, 0, warnings::add);
+
+        assertFalse(warnings.stream().anyMatch(w -> w.code() == MsfWarning.Code.EDITION_MISMATCH),
+                "No EDITION_MISMATCH expected when edition field is absent");
+    }
+
+    @Test
+    void trailingFields_placementMode_outOfRangeThrows() {
+        assertThrows(IllegalArgumentException.class, () ->
+                MsfMetadata.builder().name("Bad").recommendedPlacementMode(3));
+        assertThrows(IllegalArgumentException.class, () ->
+                MsfMetadata.builder().name("Bad").recommendedPlacementMode(254));
+    }
+
+    @Test
+    void trailingFields_mcEdition_outOfRangeThrows() {
+        assertThrows(IllegalArgumentException.class, () ->
+                MsfMetadata.builder().name("Bad").mcEdition(3));
+        assertThrows(IllegalArgumentException.class, () ->
+                MsfMetadata.builder().name("Bad").mcEdition(-1));
+    }
+
+    @Test
+    void trailingFields_allPlacementModes_valid() throws Exception {
+        int[] validModes = {
+                MsfMetadata.PLACEMENT_MODE_STRICT,
+                MsfMetadata.PLACEMENT_MODE_FUNCTIONAL,
+                MsfMetadata.PLACEMENT_MODE_LOOSE,
+                MsfMetadata.PLACEMENT_MODE_UNSPECIFIED
+        };
+        for (int mode : validModes) {
+            MsfMetadata meta = MsfMetadata.builder()
+                    .name("Mode test")
+                    .recommendedPlacementMode(mode)
+                    .build();
+            byte[] bytes = meta.toBytes(null);
+            MsfMetadata parsed = MsfMetadata.fromBytes(bytes, 0, null);
+            assertEquals(mode, parsed.recommendedPlacementMode(), "Mode " + mode + " should round trip");
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // Helper
+    // -------------------------------------------------------------------------
+
+    /** Removes {@code n} bytes from the block body and updates the block_length u32 prefix. */
+    private static byte[] truncateBlockBody(byte[] bytes, int n) {
+        byte[] truncated = Arrays.copyOf(bytes, bytes.length - n);
+        int blockLen = (truncated[0] & 0xFF)
+                | ((truncated[1] & 0xFF) << 8)
+                | ((truncated[2] & 0xFF) << 16)
+                | ((truncated[3] & 0xFF) << 24);
+        blockLen -= n;
+        truncated[0] = (byte) (blockLen & 0xFF);
+        truncated[1] = (byte) ((blockLen >> 8) & 0xFF);
+        truncated[2] = (byte) ((blockLen >> 16) & 0xFF);
+        truncated[3] = (byte) ((blockLen >> 24) & 0xFF);
+        return truncated;
     }
 
     @Test

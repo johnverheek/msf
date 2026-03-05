@@ -50,6 +50,11 @@ import java.util.function.Consumer;
  *       i32   functional volume max X
  *       i32   functional volume max Y
  *       i32   functional volume max Z
+ *     [trailing fields — V1_L, optional; readers stop at block_length boundary]
+ *     str     tool name    (default: empty)
+ *     str     tool version (default: empty)
+ *     u8      recommended placement mode (default: 0xFF = unspecified)
+ *     u8      mc edition   (default: 0x02 = unknown)
  * </pre>
  *
  * @see MsfSpec Section 5 — metadata block
@@ -129,6 +134,29 @@ public final class MsfMetadata {
     private final Optional<FunctionalVolume> functionalVolume;
 
     // -------------------------------------------------------------------------
+    // Trailing fields (V1_L — Section 5.1)
+    // -------------------------------------------------------------------------
+
+    /** Tool name; empty string if unknown or absent. */
+    private final String toolName;
+
+    /** Tool version string; empty string if unknown or absent. */
+    private final String toolVersion;
+
+    /**
+     * Recommended placement mode (Section 5.1).
+     * See {@link #PLACEMENT_MODE_STRICT}, {@link #PLACEMENT_MODE_FUNCTIONAL},
+     * {@link #PLACEMENT_MODE_LOOSE}, {@link #PLACEMENT_MODE_UNSPECIFIED}.
+     */
+    private final int recommendedPlacementMode;
+
+    /**
+     * MC edition (Section 5.1).
+     * See {@link #EDITION_JAVA}, {@link #EDITION_BEDROCK}, {@link #EDITION_UNKNOWN}.
+     */
+    private final int mcEdition;
+
+    // -------------------------------------------------------------------------
     // Constants
     // -------------------------------------------------------------------------
 
@@ -156,6 +184,22 @@ public final class MsfMetadata {
     /** Mask of reserved rotation compatibility bits (5–7). */
     public static final int ROT_COMPAT_RESERVED_MASK = 0xE0;
 
+    /** Recommended placement mode — strict: every block must match exactly (Section 5.1). */
+    public static final int PLACEMENT_MODE_STRICT = 0x00;
+    /** Recommended placement mode — functional: blocks placed for correct function, minor cosmetic differences OK (Section 5.1). */
+    public static final int PLACEMENT_MODE_FUNCTIONAL = 0x01;
+    /** Recommended placement mode — loose: best-effort, substitutions acceptable (Section 5.1). */
+    public static final int PLACEMENT_MODE_LOOSE = 0x02;
+    /** Recommended placement mode — unspecified: author made no recommendation (Section 5.1). */
+    public static final int PLACEMENT_MODE_UNSPECIFIED = 0xFF;
+
+    /** MC edition — Java Edition (Section 5.1). */
+    public static final int EDITION_JAVA = 0x00;
+    /** MC edition — Bedrock Edition (Section 5.1). */
+    public static final int EDITION_BEDROCK = 0x01;
+    /** MC edition — unknown or not specified (Section 5.1). */
+    public static final int EDITION_UNKNOWN = 0x02;
+
     // -------------------------------------------------------------------------
     // Constructor
     // -------------------------------------------------------------------------
@@ -165,7 +209,8 @@ public final class MsfMetadata {
             String description, List<String> tags, List<String> contributors,
             String licenseIdentifier, String sourceUrl, byte[] thumbnail,
             String anchorName, int anchorOffsetX, int anchorOffsetY, int anchorOffsetZ,
-            int canonicalFacing, int rotationCompatibility, Optional<FunctionalVolume> functionalVolume) {
+            int canonicalFacing, int rotationCompatibility, Optional<FunctionalVolume> functionalVolume,
+            String toolName, String toolVersion, int recommendedPlacementMode, int mcEdition) {
         this.name = name;
         this.author = author;
         this.createdTimestamp = createdTimestamp;
@@ -183,6 +228,10 @@ public final class MsfMetadata {
         this.canonicalFacing = canonicalFacing;
         this.rotationCompatibility = rotationCompatibility;
         this.functionalVolume = functionalVolume;
+        this.toolName = toolName;
+        this.toolVersion = toolVersion;
+        this.recommendedPlacementMode = recommendedPlacementMode;
+        this.mcEdition = mcEdition;
     }
 
     // -------------------------------------------------------------------------
@@ -259,6 +308,24 @@ public final class MsfMetadata {
 
     public Optional<FunctionalVolume> functionalVolume() {
         return functionalVolume;
+    }
+
+    public String toolName() {
+        return toolName;
+    }
+
+    public String toolVersion() {
+        return toolVersion;
+    }
+
+    /** @see #PLACEMENT_MODE_STRICT #PLACEMENT_MODE_FUNCTIONAL #PLACEMENT_MODE_LOOSE #PLACEMENT_MODE_UNSPECIFIED */
+    public int recommendedPlacementMode() {
+        return recommendedPlacementMode;
+    }
+
+    /** @see #EDITION_JAVA #EDITION_BEDROCK #EDITION_UNKNOWN */
+    public int mcEdition() {
+        return mcEdition;
     }
 
     // -------------------------------------------------------------------------
@@ -360,6 +427,13 @@ public final class MsfMetadata {
             } else {
                 body.write(0x00);
             }
+
+            // Trailing fields (Section 5.1 — V1_L)
+            // Existing readers stop at their known block_length boundary and ignore these bytes.
+            writeStr(body, toolName);
+            writeStr(body, toolVersion);
+            body.write(recommendedPlacementMode & 0xFF);
+            body.write(mcEdition & 0xFF);
         } catch (java.io.IOException e) {
             throw new AssertionError("ByteArrayOutputStream.write threw unexpectedly", e);
         }
@@ -394,8 +468,10 @@ public final class MsfMetadata {
         ByteBuffer buf = ByteBuffer.wrap(data, offset, data.length - offset)
                 .order(ByteOrder.LITTLE_ENDIAN);
 
-        // Read block_length (u32) — we use it to track position for thumbnail skip
-        Integer.toUnsignedLong(buf.getInt());
+        // Read block_length (u32) — used to determine the block boundary for trailing fields.
+        // Readers MUST NOT read beyond this boundary (Section 5.1).
+        long blockLength = Integer.toUnsignedLong(buf.getInt());
+        int blockEnd = (int) Math.min((long) offset + 4L + blockLength, data.length);
 
         String name = readStr(buf);
         if (name.isEmpty()) {
@@ -497,11 +573,51 @@ public final class MsfMetadata {
             functionalVolume = Optional.empty();
         }
 
+        // Trailing fields (Section 5.1 — V1_L).
+        // Absent fields default to empty strings / 0xFF / 0x02.
+        // Readers MUST NOT throw on absent trailing fields; partial reads apply defaults.
+        String toolName = "";
+        String toolVersion = "";
+        int recommendedPlacementMode = PLACEMENT_MODE_UNSPECIFIED;
+        int mcEdition = EDITION_UNKNOWN;
+
+        String tn = readTrailingStr(buf, blockEnd);
+        if (tn != null) {
+            toolName = tn;
+            String tv = readTrailingStr(buf, blockEnd);
+            if (tv != null) {
+                toolVersion = tv;
+                if (blockEnd - buf.position() >= 1) {
+                    recommendedPlacementMode = Byte.toUnsignedInt(buf.get());
+                    if (blockEnd - buf.position() >= 1) {
+                        long mcEditionOffset = buf.position();
+                        mcEdition = Byte.toUnsignedInt(buf.get());
+                        // Emit EDITION_MISMATCH if edition is present, non-default, and non-Java
+                        // (Section 5.1, Section 3.5.1)
+                        if (mcEdition != EDITION_JAVA && mcEdition != EDITION_UNKNOWN
+                                && warningConsumer != null) {
+                            warningConsumer.accept(MsfWarning.atOffset(
+                                    MsfWarning.Code.EDITION_MISMATCH,
+                                    String.format(
+                                            "mc_edition field value 0x%02X indicates %s — "
+                                                    + "this reader implements Java Edition only "
+                                                    + "(Section 5.1)",
+                                            mcEdition,
+                                            mcEdition == EDITION_BEDROCK
+                                                    ? "Bedrock Edition" : "an unrecognised edition"),
+                                    mcEditionOffset));
+                        }
+                    }
+                }
+            }
+        }
+
         return new MsfMetadata(
                 name, author, createdTimestamp, modifiedTimestamp, description,
                 tags, contributors, licenseId, sourceUrl, thumbnailBytes,
                 anchorName, anchorOffsetX, anchorOffsetY, anchorOffsetZ,
-                canonicalFacing, rotCompatSanitized, functionalVolume);
+                canonicalFacing, rotCompatSanitized, functionalVolume,
+                toolName, toolVersion, recommendedPlacementMode, mcEdition);
     }
 
     // -------------------------------------------------------------------------
@@ -540,6 +656,10 @@ public final class MsfMetadata {
         private int canonicalFacing = FACING_NORTH;
         private int rotationCompatibility = 0;
         private Optional<FunctionalVolume> functionalVolume = Optional.empty();
+        private String toolName = "";
+        private String toolVersion = "";
+        private int recommendedPlacementMode = PLACEMENT_MODE_UNSPECIFIED;
+        private int mcEdition = EDITION_UNKNOWN;
 
         private Builder() {
         }
@@ -621,6 +741,51 @@ public final class MsfMetadata {
             return this;
         }
 
+        public Builder toolName(String toolName) {
+            this.toolName = toolName;
+            return this;
+        }
+
+        public Builder toolVersion(String toolVersion) {
+            this.toolVersion = toolVersion;
+            return this;
+        }
+
+        /**
+         * Sets the recommended placement mode.
+         *
+         * @param mode one of {@link #PLACEMENT_MODE_STRICT}, {@link #PLACEMENT_MODE_FUNCTIONAL},
+         *             {@link #PLACEMENT_MODE_LOOSE}, or {@link #PLACEMENT_MODE_UNSPECIFIED} (0xFF)
+         * @throws IllegalArgumentException if {@code mode} is not 0, 1, 2, or 255
+         */
+        public Builder recommendedPlacementMode(int mode) {
+            if (mode != PLACEMENT_MODE_STRICT && mode != PLACEMENT_MODE_FUNCTIONAL
+                    && mode != PLACEMENT_MODE_LOOSE && mode != PLACEMENT_MODE_UNSPECIFIED) {
+                throw new IllegalArgumentException(String.format(
+                        "Field 'recommendedPlacementMode' value %d is invalid — "
+                                + "must be 0 (strict), 1 (functional), 2 (loose), or 255 (unspecified)",
+                        mode));
+            }
+            this.recommendedPlacementMode = mode;
+            return this;
+        }
+
+        /**
+         * Sets the MC edition field.
+         *
+         * @param edition one of {@link #EDITION_JAVA}, {@link #EDITION_BEDROCK}, or {@link #EDITION_UNKNOWN}
+         * @throws IllegalArgumentException if {@code edition} is not 0, 1, or 2
+         */
+        public Builder mcEdition(int edition) {
+            if (edition < EDITION_JAVA || edition > EDITION_UNKNOWN) {
+                throw new IllegalArgumentException(String.format(
+                        "Field 'mcEdition' value %d is invalid — must be 0 (Java), 1 (Bedrock), or 2 (unknown)",
+                        edition));
+            }
+            this.mcEdition = edition;
+            return this;
+        }
+
         public MsfMetadata build() {
             if (name.isEmpty()) {
                 throw new IllegalArgumentException("Metadata 'name' must not be empty (Section 5.2)");
@@ -629,7 +794,8 @@ public final class MsfMetadata {
                     name, author, createdTimestamp, modifiedTimestamp, description,
                     tags, contributors, licenseIdentifier, sourceUrl, thumbnail,
                     anchorName, anchorOffsetX, anchorOffsetY, anchorOffsetZ,
-                    canonicalFacing, rotationCompatibility, functionalVolume);
+                    canonicalFacing, rotationCompatibility, functionalVolume,
+                    toolName, toolVersion, recommendedPlacementMode, mcEdition);
         }
     }
 
@@ -671,6 +837,23 @@ public final class MsfMetadata {
     private static void writeU16(java.io.OutputStream out, int v) throws java.io.IOException {
         out.write(v & 0xFF);
         out.write((v >> 8) & 0xFF);
+    }
+
+    /**
+     * Reads a trailing {@code str} field only if there are enough bytes before {@code blockEnd}.
+     * Returns {@code null} without advancing the buffer position if the field is absent or partial.
+     */
+    private static String readTrailingStr(ByteBuffer buf, int blockEnd) {
+        if (blockEnd - buf.position() < 2) return null;
+        buf.mark();
+        int len = Short.toUnsignedInt(buf.getShort());
+        if (blockEnd - buf.position() < len) {
+            buf.reset();
+            return null;
+        }
+        byte[] bytes = new byte[len];
+        buf.get(bytes);
+        return new String(bytes, StandardCharsets.UTF_8);
     }
 
     /** Reads a {@code str} field: u16 byte length + UTF-8 bytes. */

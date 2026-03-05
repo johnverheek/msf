@@ -116,7 +116,45 @@ public record MsfWarning(
          *
          * @see MsfSpec Section 5.2 — thumbnail
          */
-        MALFORMED_THUMBNAIL
+        MALFORMED_THUMBNAIL,
+
+        /**
+         * A mirror transform was applied to a schematic that contains asymmetric mechanical
+         * blocks (e.g. pistons, hoppers, comparators). The mirrored placement may not function
+         * as the original author intended.
+         *
+         * <p>This is an advisory placement-side code. It is defined here for tools to use
+         * during placement operations and is NOT emitted by {@link dev.msf.core.io.MsfReader}
+         * or {@link dev.msf.core.io.MsfWriter}.
+         *
+         * @see MsfSpec Section 3.5.1 — warning codes
+         */
+        MIRROR_RISK,
+
+        /**
+         * A layer was placed without its declared dependencies having been placed first.
+         * The placement may be incomplete or non-functional as a result.
+         *
+         * <p>This is an advisory placement-side code. It is defined here for tools to use
+         * during placement operations and is NOT emitted by {@link dev.msf.core.io.MsfReader}
+         * or {@link dev.msf.core.io.MsfWriter}.
+         *
+         * @see MsfSpec Section 3.5.1 — warning codes
+         */
+        UNMET_DEPENDENCY,
+
+        /**
+         * The {@code mc_edition} field in the metadata block indicates an edition other than
+         * Java Edition (0x00), but this reader implements Java Edition only.
+         *
+         * <p>The schematic was likely produced from a Bedrock Edition world. Block state strings,
+         * entity type identifiers, biome identifiers, and NBT structure may differ from
+         * Java Edition conventions. Parsing continues, but placement results may be incorrect.
+         *
+         * @see MsfSpec Section 5.1 — metadata block trailing fields
+         * @see MsfSpec Section 3.5.1 — warning codes
+         */
+        EDITION_MISMATCH
     }
 
     /**
