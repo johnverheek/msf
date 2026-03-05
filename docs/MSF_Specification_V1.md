@@ -38,6 +38,8 @@ This specification does not define:
 - How tools implement viewport slicing or layer toggling
 - Any mod, plugin, or application
 
+> **Edition scope (non-normative):** This specification is authored with Java Edition as the primary target. Blockstate strings, entity type identifiers, biome identifiers, and NBT structure follow Java Edition conventions as of the MC data version declared in the header. Bedrock Edition uses different identifiers, different NBT schemas, and different data versions. A conforming MSF V1.0 file produced from a Bedrock world is outside the scope of this specification. Cross-edition support, if pursued, would require a future minor version with explicit identifier mapping provisions.
+
 ### 1.3 Terminology
 
 - **Block** — a discrete section of an MSF file located via an absolute offset. Not to be confused with a Minecraft block.
@@ -140,24 +142,24 @@ Bit 0:   Has entities
 Bit 1:   Has block entities
 Bit 2:   Has biome data
 Bit 3:   Has lighting hints
-Bit 4:   Multi-region
-Bit 5:   Delta/diff format
-Bit 6:   Has signal ports
+Bit 4:   Reserved in V1.0 — multi-region (not yet defined)
+Bit 5:   Reserved in V1.0 — delta/diff format (not yet defined)
+Bit 6:   Reserved in V1.0 — signal ports (not yet defined)
 Bit 7:   Reserved in V1.0 — extended construction layers (not yet defined)
-Bit 8:   Has variant system
-Bit 9:   Has palette substitution rules
+Bit 8:   Reserved in V1.0 — variant system (not yet defined)
+Bit 9:   Reserved in V1.0 — palette substitution rules (not yet defined)
 Bit 10–31: Reserved, MUST be 0 in V1.0
 ```
 
 Readers MUST NOT reject a file solely because a feature flag bit is set that the reader does not support. Readers MUST skip blocks associated with unsupported feature flags using the block length field at the start of each block. Feature flag bit 2 is an exception to this skip mechanism — biome data is embedded within region payloads rather than stored as a standalone block with a header offset field; readers that do not support biome data simply do not parse the trailing bytes of each region payload. Section 7.3 defines the writer obligations and reader expectations specific to bit 2.
 
-Readers encountering a V1.0 file — where the file's minor version equals 0 — with any of bits 7–31 set MUST emit a RESERVED_FLAG_SET warning identifying which reserved bits are set, as this indicates a non-conforming writer. Readers encountering a file whose minor version exceeds the reader's implemented minor version MUST NOT warn on reserved bits, as those bits may carry defined meaning in a later minor version the reader does not implement.
+Readers encountering a V1.0 file — where the file's minor version equals 0 — with any of bits 4–31 set MUST emit a RESERVED_FLAG_SET warning identifying which reserved bits are set, as this indicates a non-conforming writer. Readers encountering a file whose minor version exceeds the reader's implemented minor version MUST NOT warn on reserved bits, as those bits may carry defined meaning in a later minor version the reader does not implement.
 
-Writers producing V1.0 files MUST mask the feature flags value to bits 0–6 and bits 8–9 before writing. Writers MUST NOT set bit 7 in V1.0 files. Writers MUST NOT write a file with any of bits 7 or 10–31 set to 1. If a caller provides a feature flags value with reserved bits set, the writer MUST clear those bits and MUST emit a RESERVED_FLAG_CLEARED warning via the warning mechanism.
+Writers producing V1.0 files MUST NOT set bits 4–9 or bits 10–31. If a caller provides a feature flags value with any of bits 4–9 or bits 10–31 set, the writer MUST clear those bits and MUST emit a RESERVED_FLAG_CLEARED warning via the warning mechanism.
 
 Writers MUST set feature flag bits 0 and 1 if and only if the corresponding optional block (entity block and block entity block respectively) is present in the file. Feature flag bit 2 governs biome data embedded within region payloads rather than a standalone block; see Section 7.3 for the writer obligations specific to bit 2.
 
-Feature flag bit 7 is reserved in V1.0. The layer index block defined in Section 6 is required in all MSF files regardless of this flag — it is not gated by bit 7. Bit 7 is reserved for a future extended construction layer block not yet defined in this version of the specification. Readers encountering bit 7 set in a V1.0 file MUST emit a RESERVED_FLAG_SET warning.
+Feature flag bits 4, 5, 6, 7, 8, and 9 are all reserved in V1.0 — no block layouts are defined for these bits in this version of the specification. Writers MUST NOT set any of these bits in V1.0 files. Readers encountering any of bits 4–9 set in a V1.0 file MUST emit a RESERVED_FLAG_SET warning. Feature flag bit 7 additionally notes that the layer index block defined in Section 6 is required in all MSF files unconditionally and is not gated by bit 7.
 
 ### 3.4 MC Data Version
 
@@ -179,22 +181,25 @@ Offsets at positions 16–35 are absolute byte offsets from the beginning of the
 
 ### 3.5.1 Warning Mechanism
 
-Warnings are non-fatal diagnostic conditions detected during parsing or writing. A conforming reader and writer implementation MUST expose a mechanism for callers to receive warnings produced during an operation. Warnings MUST NOT be emitted to stdout, stderr, or any logging framework by default — routing warnings is the caller's responsibility. Multiple warnings may be produced in a single operation and each MUST be delivered individually, not aggregated.
+Warnings are non-fatal diagnostic conditions detected during parsing, writing, or placement. A conforming reader and writer implementation MUST expose a mechanism for callers to receive warnings produced during an operation. Warnings MUST NOT be emitted to stdout, stderr, or any logging framework by default — routing warnings is the caller's responsibility. Multiple warnings may be produced in a single operation and each MUST be delivered individually, not aggregated. The warning mechanism defined here for readers and writers MAY also be used by tools during placement operations; warning codes designated as advisory in the table below apply in that context.
 
-In the Java reference implementation, MsfReader and MsfWriter MUST accept an optional `Consumer<MsfWarning>` parameter on all read and write methods respectively, and MUST invoke it once per warning produced. MsfWarning MUST carry at minimum: a warning code (MsfWarning.Code enum), a human-readable message, and the file byte offset where the condition was detected. For warnings produced during write operations where no file byte offset is meaningful, the offset field MUST be set to -1. Callers that do not provide a consumer receive no warnings.
+In the Java reference implementation, MsfReader and MsfWriter MUST accept an optional `Consumer<MsfWarning>` parameter on all read and write methods respectively, and MUST invoke it once per warning produced. MsfWarning MUST carry at minimum: a warning code (MsfWarning.Code enum), a human-readable message, and the file byte offset where the condition was detected. For warnings produced during write operations or tool-side placement operations where no file byte offset is meaningful, the offset field MUST be set to -1. Callers that do not provide a consumer receive no warnings.
 
 Defined warning codes and the conditions that trigger them:
 
-|Code                     |Condition                                                                                                                                  |
-|-------------------------|-------------------------------------------------------------------------------------------------------------------------------------------|
-|`RESERVED_FLAG_SET`      |Reader detected reserved bits set — feature flag bits 7–31 in a V1.0 file (Section 3.3), or rotation compatibility bits 5–7 (Section 10.3)|
-|`RESERVED_FLAG_CLEARED`  |Writer cleared reserved bits provided by caller — applies to feature flags (Section 3.3) and rotation compatibility (Section 10.3)         |
-|`FILE_SIZE_MISMATCH`     |Actual file length does not match the file_size field (Section 3.6)                                                                        |
-|`FILE_CHECKSUM_FAILURE`  |File checksum verification failed (Section 11)                                                                                             |
-|`FEATURE_FLAG_CONFLICT`  |Offset field state conflicts with the corresponding feature flag (Section 3.5)                                                             |
-|`OFFSET_BEYOND_FILE_SIZE`|A non-zero block offset is at or beyond the file_size value (Section 3.5)                                                                  |
-|`DATA_VERSION_MISMATCH`  |File MC data version differs from the currently active game version (Section 3.4)                                                          |
-|`THUMBNAIL_INVALID`      |Thumbnail size is non-zero but the thumbnail bytes are not a valid PNG file (Section 5.2)                                                  |
+|Code                     |Condition                                                                                                                                    |
+|-------------------------|---------------------------------------------------------------------------------------------------------------------------------------------|
+|`RESERVED_FLAG_SET`      |Reader detected reserved bits set — feature flag bits 4–31 in a V1.0 file (Section 3.3), or rotation compatibility bits 5–7 (Section 10.3)  |
+|`RESERVED_FLAG_CLEARED`  |Writer cleared reserved bits provided by caller — applies to feature flags (Section 3.3) and rotation compatibility (Section 10.3)           |
+|`FILE_SIZE_MISMATCH`     |Actual file length does not match the file_size field (Section 3.6)                                                                          |
+|`FILE_CHECKSUM_FAILURE`  |File checksum verification failed (Section 11)                                                                                               |
+|`FEATURE_FLAG_CONFLICT`  |Offset field state conflicts with the corresponding feature flag (Section 3.5)                                                               |
+|`OFFSET_BEYOND_FILE_SIZE`|A non-zero block offset is at or beyond the file_size value (Section 3.5)                                                                    |
+|`DATA_VERSION_MISMATCH`  |File MC data version differs from the currently active game version (Section 3.4)                                                            |
+|`THUMBNAIL_INVALID`      |Thumbnail size is non-zero but the thumbnail bytes are not a valid PNG file (Section 5.2)                                                    |
+|`EDITION_MISMATCH`       |The MC edition field in the metadata block indicates an edition different from the reader's implementation (Section 5.2). Advisory.          |
+|`MIRROR_RISK`            |Tool is applying a mirror transformation to a schematic whose rotation compatibility flags do not declare the mirror valid (Section 10.3). Advisory — does not prevent placement.|
+|`UNMET_DEPENDENCY`       |A layer is being placed whose dependency list includes layers not yet placed (Section 6.4). Advisory — does not prevent placement after user confirmation.|
 
 A file size mismatch warning and a subsequent file checksum failure warning MUST be linked — the FILE_CHECKSUM_FAILURE warning message MUST note that the result is unreliable due to the prior FILE_SIZE_MISMATCH.
 
@@ -326,6 +331,19 @@ u8      Has functional volume (0x00 = absent, 0x01 = present)
   i32   Functional volume max X (relative to anchor)
   i32   Functional volume max Y (relative to anchor)
   i32   Functional volume max Z (relative to anchor)
+
+[Optional trailing fields — present only if block length covers them]
+str     Tool name (empty string if unknown)
+str     Tool version (empty string if unknown)
+u8      Recommended placement mode
+          0x00 = strict (place only within exact block footprint)
+          0x01 = functional (clear functional volume before placement)
+          0x02 = loose (place with best-effort, no clearance requirement)
+          0xFF = unspecified (author made no recommendation)
+u8      MC edition
+          0x00 = Java Edition
+          0x01 = Bedrock Edition
+          0x02 = unknown
 ```
 
 The placement metadata fields follow immediately after the thumbnail bytes. Section 10 defines the semantics and normative requirements for each placement field. The physical layout is authoritative here — Section 10 describes meaning, Section 5.1 describes position within the block.
@@ -343,6 +361,14 @@ The placement metadata fields follow immediately after the thumbnail bytes. Sect
 **Thumbnail** — the thumbnail size field is a u32 containing the byte length of the PNG data that follows. A value of 0 indicates no thumbnail is present and no bytes follow. A non-zero value indicates that exactly that many bytes of PNG data follow immediately. Readers MAY use this field to skip the thumbnail entirely by seeking forward thumbnail size bytes from the start of the thumbnail data. When thumbnail size is non-zero but the bytes do not constitute a valid PNG file, readers MUST emit a THUMBNAIL_INVALID warning and MUST skip exactly thumbnail size bytes, continuing parsing from the field immediately following the thumbnail data. Readers MUST NOT reject the file solely because the thumbnail is malformed.
 
 **Tags** are freeform UTF-8 strings. No controlled vocabulary is defined in V1. Tags are case-sensitive.
+
+**Optional trailing fields** — writers MAY omit the optional trailing fields (tool name, tool version, recommended placement mode, MC edition) by setting the block length to cover only the fields through the has functional volume indicator and any present functional volume coordinates. Readers MUST stop parsing the metadata block at the block length boundary. Readers MUST treat any absent optional trailing fields as their default values: tool name and tool version default to empty strings, recommended placement mode defaults to 0xFF (unspecified), and MC edition defaults to 0x02 (unknown).
+
+**Tool name** and **tool version** are informational only. Readers MUST NOT make any parsing decision based on these fields.
+
+**Recommended placement mode** is advisory. Tools SHOULD use the value as the default placement mode but MAY allow the user to override it. A value of 0xFF indicates the author made no recommendation. Values other than 0x00, 0x01, 0x02, and 0xFF are reserved; readers encountering a reserved value MUST treat it as 0xFF.
+
+**MC edition** is advisory. Readers SHOULD emit an EDITION_MISMATCH warning if the MC edition field indicates an edition different from the one the reader implements, as blockstate strings, entity identifiers, and NBT structure may not be valid in the reader's edition.
 
 -----
 
@@ -391,7 +417,7 @@ Readers encountering bits 2–7 set in any layer flags field MUST NOT reject the
 
 **Construction order index** defines the intended placement sequence. Lower values are placed first. Multiple layers MAY share the same construction order index indicating they can be placed in parallel.
 
-**Dependencies** list layer IDs that MUST be placed before this layer. Tools SHOULD warn the user when a placement is attempted for a layer whose dependencies have not yet been placed. A layer MUST NOT list itself as a dependency. Circular dependencies are invalid and writers MUST NOT produce them.
+**Dependencies** list layer IDs that MUST be placed before this layer. Tools SHOULD emit an UNMET_DEPENDENCY warning when a layer is placed without its declared dependencies. Tools MUST NOT prevent placement of a layer solely because its declared dependencies have not been placed — tools MUST allow placement to proceed once the user confirms after receiving the warning. A layer MUST NOT list itself as a dependency. Circular dependencies are invalid and writers MUST NOT produce them.
 
 **Layer count** is a u8. The minimum layer count is 1. The maximum layer count is 255. Every MSF file MUST contain at least one layer. Writers given more than 255 layers MUST throw IllegalArgumentException identifying the field name, the count provided, and the maximum permitted value of 255.
 
@@ -424,6 +450,8 @@ Size X, Size Y, and Size Z MUST each be at least 1. A region with a size of 0 on
 The compressed data length field contains the byte length of the compressed region payload that follows immediately in the file. Writers MUST set this field to the exact byte length of the compressed payload. Readers MUST use this field to locate the end of the compressed payload and to bound how many bytes are consumed from the file stream. Readers MUST throw MsfParseException if the number of bytes consumed from the stream for the compressed payload does not match this field — an incorrect compressed data length will misalign all subsequent file parsing. This field has the same structural significance as the packed array length field in Section 7.5.
 
 The uncompressed data length field contains the expected byte length of the payload after decompression. Writers MUST set this field to the exact byte length of the uncompressed payload. Readers SHOULD verify that the decompressed output byte length matches this field and MUST throw MsfParseException if a mismatch is detected.
+
+> **Note (non-normative):** Writers producing regions from large builds SHOULD consider splitting volumes exceeding approximately 128–256 blocks per axis into multiple regions within a layer. Very large single regions increase peak memory requirements during decompression and reduce the granularity available to tools for visibility toggling and incremental loading. This is guidance only — the format imposes no maximum region size beyond the u32 field constraints.
 
 ### 7.2 Compression Types
 
@@ -624,7 +652,7 @@ Rotation is computed as the angular delta between the canonical facing declared 
 
 ### 10.3 Rotation Compatibility
 
-The rotation compatibility field is a u8 bitmask stored in the metadata block layout declaring which transformations are valid for this schematic:
+The rotation compatibility field is a u8 bitmask stored in the metadata block layout declaring which transformations the author has declared valid for this schematic:
 
 ```
 Bit 0:  Rotate 90° valid
@@ -637,7 +665,9 @@ Bit 5–7: Reserved, MUST be 0
 
 Readers encountering bits 5–7 set in the rotation compatibility field MUST NOT reject the file. Readers SHOULD emit a RESERVED_FLAG_SET warning, as set reserved bits may indicate a non-conforming writer. Readers MUST otherwise treat reserved bits as if they were 0. Writers MUST mask the rotation compatibility value to bits 0–4 before writing. If a caller provides a value with bits 5–7 set, writers MUST clear those bits and MUST emit a RESERVED_FLAG_CLEARED warning.
 
-Tools SHOULD warn the user when a requested transformation is not declared valid. Redstone contraptions with axis-dependent behavior SHOULD declare restricted rotation compatibility.
+When a transformation bit is set, the author has declared that transformation valid; tools MAY apply it. When a transformation bit is not set, the transformation has not been author-validated; tools MUST warn the user before applying it. Tools MUST NOT silently apply an undeclared transformation — explicit user confirmation is required. Tools MUST NOT prevent the user from applying any transformation; restriction of transformations is never required by this specification.
+
+When a tool applies a mirror transformation to a schematic whose rotation compatibility flags do not declare the mirror valid, the tool MUST emit a MIRROR_RISK warning. Redstone contraptions with axis-dependent behavior SHOULD declare restricted rotation compatibility.
 
 ### 10.4 Bounding Box and Functional Volume
 
@@ -646,6 +676,8 @@ Tools SHOULD warn the user when a requested transformation is not declared valid
 **Functional volume** is an optional author-declared region that must be unobstructed for the schematic to function correctly. It may extend beyond the bounding box. Its presence is indicated by the has functional volume u8 field in the metadata block layout — a value of 0x01 indicates the six i32 coordinate fields follow; a value of 0x00 indicates they are absent. Any value other than 0x00 or 0x01 is invalid and readers MUST throw MsfParseException.
 
 Functional volume coordinates are relative to the anchor point. The min values MUST be less than or equal to the corresponding max values on each axis. Writers MUST NOT produce a functional volume where any min coordinate exceeds the corresponding max coordinate.
+
+When a tool applies rotation or mirroring to a schematic during placement, it MUST apply the same rotation or mirror transformation to the functional volume coordinates using the same transformation formulas applied to block positions. The functional volume MUST remain axis-aligned after transformation — tools MUST recompute the min and max coordinates of the functional volume by transforming all six corner coordinate values and taking the resulting axis-aligned bounding box.
 
 Tools SHOULD check the functional volume for obstructions before placement and SHOULD warn the user if obstructions are found.
 
@@ -810,3 +842,56 @@ When a feature is deprecated in a future minor version the following applies:
 **For readers:** Readers MUST continue handling deprecated features correctly regardless of deprecation status. Deprecation does not grant readers permission to stop handling a feature.
 
 **For the binary format:** Deprecated features remain in the format permanently. The flag bit remains assigned. The block type remains valid. The append-only rule has no deprecation exception.
+
+-----
+
+## Appendix G — Reference File Examples
+
+This appendix describes the structure of the canonical reference `.msf` files committed to the repository at `docs/examples/`. Implementers can use these files as binary validation targets.
+
+### G.1 Minimal Single-Block File
+
+The minimal reference file (`docs/examples/minimal_stone.msf`) encodes a single `minecraft:stone` block. It has no entities, no block entities, and no biome data. The global palette contains two entries: `minecraft:air` (palette ID 0) and `minecraft:stone` (palette ID 1).
+
+**Header (48 bytes at offset 0):**
+
+The header is annotated below. All multi-byte values are little-endian. The header checksum is the xxHash3-64 digest with seed 0 of bytes 0–39.
+
+```
+Offset  Bytes               Field
+------  ------------------  ------------------------------------------
+00      4D 53 46 21         Magic: "MSF!"
+04      01 00               Major version: 1
+06      00 00               Minor version: 0
+08      00 00 00 00         Feature flags: 0x00000000 (no optional blocks)
+0C      71 0F 00 00         MC data version: 3953 (Minecraft 1.21.1)
+10      30 00 00 00         Metadata block offset: 48 (0x30)
+14      74 00 00 00         Global palette offset: 116 (0x74)
+18      9A 00 00 00         Layer index offset: 154 (0x9A)
+1C      00 00 00 00         Entity block offset: 0 (absent)
+20      00 00 00 00         Block entity block offset: 0 (absent)
+24      E6 00 00 00         File size: 230 bytes
+28      xx xx xx xx         Header checksum: xxHash3-64(bytes 0–39),
+        xx xx xx xx         8 bytes little-endian — see repository file
+                            for exact value
+```
+
+**Metadata block (68 bytes at offset 48):**
+
+The block length is 64 (the 4-byte length field itself is not counted). The block contains: name `"example"`, empty author, zero timestamps, empty description, zero tags, zero contributors, empty license identifier, empty source URL, thumbnail size 0, anchor name `"origin"`, anchor offsets (0, 0, 0), canonical facing 0x00 (North), rotation compatibility 0x00 (none declared), has functional volume 0x00. The optional trailing fields (tool name, tool version, placement mode, MC edition) are omitted — the block length ends before them.
+
+**Global palette block (38 bytes at offset 116):**
+
+Block length 34. Entry count 2. Entry 0: `minecraft:air` (13 bytes). Entry 1: `minecraft:stone` (15 bytes).
+
+**Layer index block (68 bytes at offset 154):**
+
+Block length 64. Layer count 1. Single layer: ID 0, name `"main"`, construction order 0, no dependencies, flags 0x00, region count 1. Single region: name `"main"`, origin (0, 0, 0), size (1, 1, 1), compression 0x00 (none), compressed data length 13, uncompressed data length 13.
+
+Region payload (13 bytes, uncompressed): bits per entry 1 (because `ceil(log2(2)) = 1`), packed array length 1 (`ceil(1×1×1×1 / 64) = 1`), packed data `01 00 00 00 00 00 00 00` (palette ID 1 = stone, stored in the least significant bit of the single u64 word).
+
+**File checksum (8 bytes at offset 222):**
+
+The xxHash3-64 digest with seed 0 of bytes 0–221. See the repository file for the exact value.
+
+> **Note (non-normative):** The reference files in `docs/examples/` are the authoritative binary targets. The values described in this appendix are correct for the file as committed. Implementers building test suites are encouraged to verify byte-for-byte against the committed files rather than recomputing from this prose description.
