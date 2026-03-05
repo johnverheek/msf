@@ -12,7 +12,7 @@ This is the normative specification for the MSF file format version 1.0. Impleme
 
 ## 1. Introduction
 
-MSF is a binary file format for storing Minecraft structure schematics. It is designed to be tool-agnostic, version-stable, and extensible without breaking backwards compatibility. Any tool may implement MSF. No single tool or mod owns the format.
+MSF is a binary file format for storing Minecraft structure schematics. It is designed to be tool-agnostic, version-stable, and extensible without breaking backwards compatibility. Any tool MAY implement MSF. No single tool or mod owns the format.
 
 ### 1.1 Design Goals
 
@@ -37,6 +37,8 @@ This specification does not define:
 - How tools implement user interaction
 - How tools implement viewport slicing or layer toggling
 - Any mod, plugin, or application
+
+MSF V1.0 targets Java Edition 1.13 and later. Files authored against pre-1.13 data versions are outside the scope of this specification.
 
 > **Edition scope (non-normative):** This specification is authored with Java Edition as the primary target. Blockstate strings, entity type identifiers, biome identifiers, and NBT structure follow Java Edition conventions as of the MC data version declared in the header. Bedrock Edition uses different identifiers, different NBT schemas, and different data versions. A conforming MSF V1.0 file produced from a Bedrock world is outside the scope of this specification. Cross-edition support, if pursued, would require a future minor version with explicit identifier mapping provisions.
 
@@ -256,7 +258,7 @@ u8[]    Blockstate string (UTF-8, not null terminated)
 
 **Palette ID 0 MUST be AIR.** The string value of palette entry 0 MUST be `minecraft:air`. This is a format invariant. Writers MUST always write `minecraft:air` as the first palette entry regardless of whether air appears in the block data. Readers MUST treat palette ID 0 as air without reading the string value.
 
-**Palette entries MUST be deduplicated.** All palette entries MUST represent distinct blockstate strings. Writers MUST check for duplicates before writing and MUST throw MsfPaletteException if the input contains duplicate blockstate strings, identifying the duplicated string. Readers encountering duplicate palette entries MUST throw MsfParseException. A duplicate palette entry indicates a non-conforming writer and the palette cannot be trusted to correctly map block IDs to blockstate strings. Silent deduplication by readers is not permitted.
+**Palette entries MUST be deduplicated.** All palette entries MUST represent distinct blockstate strings. Writers MUST check for duplicates before writing and MUST throw MsfPaletteException if the input contains duplicate blockstate strings, identifying the duplicated string. Readers encountering duplicate palette entries MUST throw MsfParseException. A duplicate palette entry indicates a non-conforming writer and the palette cannot be trusted to correctly map block IDs to blockstate strings.
 
 **Writers MUST follow canonical Minecraft property ordering within blockstate strings.** Writers MUST NOT reorder properties alphabetically or by any other scheme. Properties within a blockstate string MUST appear in the order they are registered in Minecraft's BlockStateDefinition for that block as of the MC data version declared in the header.
 
@@ -271,6 +273,8 @@ minecraft:oak_stairs[facing=north,half=bottom,shape=straight,waterlogged=false]
 **Block length** allows readers that do not wish to read the palette to skip it entirely by seeking forward block length + 4 bytes from the start of the palette block.
 
 ### 4.4 Blockstate String Format
+
+Blockstate strings MUST use the namespaced identifier format introduced in Java Edition 1.13. Numeric block IDs and pre-1.13 blockstate formats are not valid in MSF V1.0.
 
 Blockstate strings follow Minecraft's standard notation:
 
@@ -383,6 +387,8 @@ Layers represent distinct construction phases such as terrain clearing, foundati
 Viewport slicing is a tool feature. Semantic layers are a format feature. These are distinct concerns and MUST NOT be conflated.
 
 Feature flag bit 7 ("Has construction layers") is reserved in V1.0. The layer index block is required unconditionally in all MSF files and is not gated by bit 7. Bit 7 is reserved for a future extended construction layer block not yet defined in this version of the specification.
+
+> **Note (non-normative):** The u8 layer count and region count fields impose a maximum of 255 layers and 255 regions per layer in V1.0. For the vast majority of schematics this is sufficient. A future minor version may introduce a large-structure mode using u16 or u32 counts via a reserved feature flag. Writers encountering these limits in V1.0 MUST throw rather than truncate — see Section 6.4.
 
 ### 6.2 Layout
 
@@ -528,6 +534,71 @@ Writers MUST compute and store this value correctly. Readers SHOULD verify that 
 Entries are packed from the least significant bit of each u64 word. When an entry would span a word boundary it begins in the next word. The remaining bits of the previous word are set to 0 and MUST be ignored by readers.
 
 Packed block data values MUST be valid palette IDs — each value MUST be less than the global palette entry count. Writers MUST NOT produce packed block data containing out-of-range palette IDs. Readers MUST throw MsfParseException if any unpacked value in the block data references a palette ID that does not exist in the global palette. Silent substitution with air or any other fallback value is not permitted.
+
+> **Note (non-normative) — Bit-packing worked example**
+>
+> This example shows the complete packing computation for a concrete region. All values here are illustrative — the canonical binary test vector is the reference file committed to `docs/examples/` in the repository.
+>
+> **Setup:** A 3×3×3 region (27 blocks) with a global palette of 5 entries:
+>
+> | ID | Blockstate              |
+> |----|-------------------------|
+> | 0  | `minecraft:air`         |
+> | 1  | `minecraft:stone`       |
+> | 2  | `minecraft:oak_log`     |
+> | 3  | `minecraft:dirt`        |
+> | 4  | `minecraft:gravel`      |
+>
+> **Step 1 — bits_per_entry:**
+>
+> ```
+> bits_per_entry = max(1, ceil(log2(5))) = max(1, 3) = 3
+> ```
+>
+> Three bits are required to represent palette IDs 0–4.
+>
+> **Step 2 — packed_array_length:**
+>
+> ```
+> packed_array_length = ceil(3 × 3 × 3 × 3 / 64) = ceil(81 / 64) = 2
+> ```
+>
+> Two u64 words are required to hold 81 bits of packed data.
+>
+> **Step 3 — Block ordering**
+>
+> Blocks are indexed in YZX order. For this region the 27 array indices map as follows (y outermost, x innermost):
+>
+> | Index range | y | z | x values |
+> |-------------|---|---|----------|
+> | 0–2         | 0 | 0 | 0, 1, 2  |
+> | 3–5         | 0 | 1 | 0, 1, 2  |
+> | 6–8         | 0 | 2 | 0, 1, 2  |
+> | 9–17        | 1 | 0–2 | 0–2   |
+> | 18–26       | 2 | 0–2 | 0–2   |
+>
+> Suppose the region contains: all 9 blocks at y=0 are stone (ID 1), all 9 at y=1 are oak_log (ID 2), all 9 at y=2 are air (ID 0). The 27 IDs in array order are:
+>
+> ```
+> [1,1,1,1,1,1,1,1,1, 2,2,2,2,2,2,2,2,2, 0,0,0,0,0,0,0,0,0]
+>  ^---- y=0 ----^    ^---- y=1 ----^    ^---- y=2 ----^
+> ```
+>
+> **Step 4 — Packing into u64 words**
+>
+> Each palette ID occupies exactly 3 bits. Entry N occupies bits [N×3, N×3+2] in the packed array, with the ID's least significant bit at the lower bit position. Packing proceeds from bit 0 of word 0 upward.
+>
+> - **Entries 0–8 (ID 1 = binary `001`):** Occupy bits 0–26 of word 0. Because ID 1 has only its bit 0 set, bits 0, 3, 6, 9, 12, 15, 18, 21, and 24 are set in word 0.
+> - **Entries 9–17 (ID 2 = binary `010`):** Occupy bits 27–53 of word 0. Because ID 2 has only its bit 1 set, bits 28, 31, 34, 37, 40, 43, 46, 49, and 52 are set in word 0.
+> - **Entries 18–20 (ID 0 = binary `000`):** Occupy bits 54–62 of word 0. No bits set.
+> - **Entry 21 (ID 0 = binary `000`) — word boundary span:** Entry 21 would occupy bits 63–65. Bit 63 falls in word 0; bits 64–65 fall in word 1. The low bit of entry 21's value (0) goes to bit 63 of word 0; the remaining two bits of the value (both 0) go to bits 0–1 of word 1. Bit 63 of word 0 is not set. This is the word boundary case: the entry starts in word 0 and continues in word 1.
+> - **Entries 22–26 (ID 0):** Occupy bits 2–16 of word 1. No bits set.
+> - **Bits 17–63 of word 1:** Padding zeros, ignored by readers.
+>
+> Word 0 has set bits at positions: 0, 3, 6, 9, 12, 15, 18, 21, 24, 28, 31, 34, 37, 40, 43, 46, 49, 52.
+> Word 1 is all zeros.
+>
+> The packed array stored in the file is these two u64 words, each in little-endian byte order. A reader unpacks by extracting 3 bits at a time starting from bit 0 of word 0, skipping to the next word when a 3-bit window would span the word boundary (not consuming the straddle — the remainder of the current word is discarded and the entry begins at bit 0 of the next word).
 
 ### 7.6 Biome Data
 
@@ -807,7 +878,9 @@ This appendix summarizes the practical commitments this specification makes to i
 
 ## Appendix C — Canonical Minecraft Ordering Reference
 
-Blockstate property ordering follows the registration order in Minecraft's BlockStateDefinition as of the MC data version declared in the header. Implementations targeting a specific MC data version SHOULD derive property ordering from that version's game data directly rather than hardcoding property lists, as property sets may change between Minecraft releases.
+Blockstate property ordering follows the registration order in Minecraft's BlockStateDefinition as of the MC data version declared in the header. The canonical ordering is determined by the order in which properties are passed to `BlockStateDefinition.Builder.add()` in Minecraft's source, which corresponds to the order properties appear in the game's generated block reports.
+
+Implementations SHOULD derive property ordering from the game's data generator output rather than hardcoding property lists. Minecraft's data generator (invoked with `--reports`) produces a `blocks.json` file in the generated reports directory; the property order within each block's `properties` object in that file reflects canonical ordering for that data version. Property sets and ordering may change between Minecraft releases, so derivation from game data is preferred over hardcoding to remain correct across data versions.
 
 -----
 
@@ -873,7 +946,7 @@ Offset  Bytes               Field
 24      E6 00 00 00         File size: 230 bytes
 28      xx xx xx xx         Header checksum: xxHash3-64(bytes 0–39),
         xx xx xx xx         8 bytes little-endian — see repository file
-                            for exact value
+                            for the exact value
 ```
 
 **Metadata block (68 bytes at offset 48):**
@@ -888,10 +961,49 @@ Block length 34. Entry count 2. Entry 0: `minecraft:air` (13 bytes). Entry 1: `m
 
 Block length 64. Layer count 1. Single layer: ID 0, name `"main"`, construction order 0, no dependencies, flags 0x00, region count 1. Single region: name `"main"`, origin (0, 0, 0), size (1, 1, 1), compression 0x00 (none), compressed data length 13, uncompressed data length 13.
 
-Region payload (13 bytes, uncompressed): bits per entry 1 (because `ceil(log2(2)) = 1`), packed array length 1 (`ceil(1×1×1×1 / 64) = 1`), packed data `01 00 00 00 00 00 00 00` (palette ID 1 = stone, stored in the least significant bit of the single u64 word).
+Region payload (13 bytes, uncompressed): bits per entry 1 (because `max(1, ceil(log2(2))) = 1`), packed array length 1 (`ceil(1×1×1×1 / 64) = 1`), packed data `01 00 00 00 00 00 00 00` (palette ID 1 = stone stored in the least significant bit of the single u64 word).
 
 **File checksum (8 bytes at offset 222):**
 
 The xxHash3-64 digest with seed 0 of bytes 0–221. See the repository file for the exact value.
 
 > **Note (non-normative):** The reference files in `docs/examples/` are the authoritative binary targets. The values described in this appendix are correct for the file as committed. Implementers building test suites are encouraged to verify byte-for-byte against the committed files rather than recomputing from this prose description.
+
+### G.2 Two-Layer Redstone Contraption
+
+The two-layer reference file (`docs/examples/two_layer_redstone.msf`) demonstrates layer serialization, construction order, and dependency encoding. It represents a minimal redstone contraption: a base of stone blocks that must be placed first, and a redstone layer containing observers placed on top, which depends on the base layer.
+
+**Layer index layout:**
+
+The layer index block contains layer count = 2, followed by two layer records in sequence.
+
+**Layer 0 — structural base:**
+
+- Layer ID: `0x00`
+- Name: `"base"` (4 bytes as UTF-8, with u16 length prefix)
+- Construction order index: `0` (placed first)
+- Dependency count: `0` (no dependencies)
+- Flags: `0x00`
+- Region count: `1`
+- One region header follows, describing the stone blocks.
+
+**Layer 1 — redstone:**
+
+- Layer ID: `0x01`
+- Name: `"redstone"` (8 bytes as UTF-8, with u16 length prefix)
+- Construction order index: `1` (placed after base)
+- Dependency count: `1`
+- Dependent layer IDs: `[0x00]` (one byte, referencing layer ID 0)
+- Flags: `0x00`
+- Region count: `1`
+- One region header follows, describing the observer blocks.
+
+**Construction order reconstruction:**
+
+A reader reconstructing placement order groups layers by construction order index and resolves dependencies within groups. In this file, layer 0 (index 0) is placed first. Layer 1 (index 1) declares layer 0 as a dependency — a tool encountering a placement request for layer 1 before layer 0 has been placed SHOULD emit an UNMET_DEPENDENCY warning per Section 6.4.
+
+**Dependency field encoding on the wire:**
+
+The dependency count byte for layer 1 is `0x01`. The single dependent layer ID byte immediately following is `0x00`. A reader parsing the layer record reads dependency count, then reads exactly that many u8 bytes as the dependency list.
+
+The full binary layout of this file, with annotated hex, is committed to `docs/examples/two_layer_redstone.msf` in the repository.
