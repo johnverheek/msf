@@ -63,25 +63,9 @@ public final class RegionCompressor {
         }
     }
 
-    /**
-     * Encodes data for brotli storage using a 4-byte little-endian length prefix
-     * followed by the raw data bytes. This stub-compatible format is used in the
-     * test environment where the real brotli encoder library is not available.
-     * The {@code org.brotli.dec.BrotliInputStream} test stub reads this format.
-     * In production, replace with a real brotli encoder producing RFC 7932 output.
-     */
     private static byte[] compressBrotli(byte[] data) throws MsfCompressionException {
         try {
-            // Stub format: 4-byte LE length + raw bytes. The BrotliInputStream stub
-            // reads this by extracting length then reading that many bytes.
-            byte[] result = new byte[4 + data.length];
-            int len = data.length;
-            result[0] = (byte) (len        & 0xFF);
-            result[1] = (byte) ((len >>  8) & 0xFF);
-            result[2] = (byte) ((len >> 16) & 0xFF);
-            result[3] = (byte) ((len >> 24) & 0xFF);
-            System.arraycopy(data, 0, result, 4, data.length);
-            return result;
+            return BrotliLiteralStream.encode(data);
         } catch (Exception e) {
             throw new MsfCompressionException("brotli encoding failed: " + e.getMessage(), e);
         }
@@ -101,41 +85,52 @@ public final class RegionCompressor {
 
         static byte[] encode(byte[] data) {
             BitWriter bw = new BitWriter();
-            // Stream header: WBITS=6 → window = 2^16 bytes (3 bits, LSB first: 0b110)
-            bw.writeBits(0b110, 3);
+            // Stream header: 1 bit = 0 → window_bits = 16 (RFC 7932 §9.1)
+            bw.writeBits(0, 1);
 
-            if (data.length == 0) {
-                // ISLAST=1, ISLASTEMPTY=1
-                bw.writeBits(1, 1);
-                bw.writeBits(1, 1);
-            } else {
-                int offset = 0;
-                while (offset < data.length) {
-                    int chunkLen = Math.min(MAX_MLEN, data.length - offset);
-                    boolean isLast = (offset + chunkLen == data.length);
-                    writeUncompressedMetablock(bw, data, offset, chunkLen, isLast);
-                    offset += chunkLen;
-                }
+            // Write each chunk as a non-last ISUNCOMPRESSED=1 metablock.
+            // ISUNCOMPRESSED is only parsed by the decoder when ISLAST=0,
+            // so we must never set ISLAST=1 on a data block.
+            int offset = 0;
+            while (offset < data.length) {
+                int chunkLen = Math.min(MAX_MLEN, data.length - offset);
+                writeUncompressedMetablock(bw, data, offset, chunkLen);
+                offset += chunkLen;
             }
+
+            // Empty last metablock: ISLAST=1, ISLASTEMPTY=1 (RFC 7932 §9.2)
+            bw.writeBits(1, 1);
+            bw.writeBits(1, 1);
 
             return bw.toByteArray();
         }
 
         /**
-         * Writes a metablock with ISUNCOMPRESSED=1 (RFC 7932 Section 9.2).
+         * Writes a non-last metablock with ISUNCOMPRESSED=1 (RFC 7932 §9.2).
+         * ISLAST is always 0: ISUNCOMPRESSED is only decoded when ISLAST=0.
          */
         private static void writeUncompressedMetablock(
-                BitWriter bw, byte[] data, int offset, int mlen, boolean isLast) {
-            bw.writeBits(isLast ? 1 : 0, 1); // ISLAST
-            if (isLast) {
-                bw.writeBits(0, 1);  // ISLASTEMPTY = 0 (we have data)
-            }
+                BitWriter bw, byte[] data, int offset, int mlen) {
+            bw.writeBits(0, 1); // ISLAST = 0 (ISUNCOMPRESSED only parsed when ISLAST=0)
 
-            // MLEN: encode (mlen-1) in MNIBBLES nibbles (2-bit count, then nibbles)
+            // MLEN: 2-bit MNIBBLES field (raw value N → N+4 nibbles), then (mlen-1) in nibbles.
+            // Decoder rejects the stream with "Exuberant nibble" if the top nibble is zero
+            // and sizeNibbles > 4, so we must use the minimum sizeNibbles:
+            //   sizeNibbles=4 (raw=0): mlenMinus1 in [0, 2^16-1]  — no exuberant check
+            //   sizeNibbles=5 (raw=1): mlenMinus1 in [2^16, 2^20-1] — top nibble guaranteed ≠ 0
+            //   sizeNibbles=6 (raw=2): mlenMinus1 in [2^20, 2^24-1] — top nibble guaranteed ≠ 0
             int mlenMinus1 = mlen - 1;
-            // MNIBBLES=2 => 6 nibbles => 24 bits. Supports up to 16 MiB - 1.
-            bw.writeBits(2, 2);             // MNIBBLES = 6 nibbles
-            bw.writeBits(mlenMinus1, 24);   // (mlen-1) in 24 bits, LSB first
+            int rawNibbles;
+            int mlenBits;
+            if (mlenMinus1 < (1 << 16)) {
+                rawNibbles = 0; mlenBits = 16; // sizeNibbles=4, no exuberant check
+            } else if (mlenMinus1 < (1 << 20)) {
+                rawNibbles = 1; mlenBits = 20; // sizeNibbles=5
+            } else {
+                rawNibbles = 2; mlenBits = 24; // sizeNibbles=6
+            }
+            bw.writeBits(rawNibbles, 2);
+            bw.writeBits(mlenMinus1, mlenBits);
 
             bw.writeBits(1, 1); // ISUNCOMPRESSED = 1
 

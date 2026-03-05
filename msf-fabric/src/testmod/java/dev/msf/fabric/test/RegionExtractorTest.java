@@ -1,6 +1,14 @@
 package dev.msf.fabric.test;
 
+import dev.msf.core.MsfException;
 import dev.msf.core.MsfPaletteException;
+import dev.msf.core.io.MsfReader;
+import dev.msf.core.io.MsfReaderConfig;
+import dev.msf.core.io.MsfWriter;
+import dev.msf.core.model.MsfFile;
+import dev.msf.core.model.MsfLayer;
+import dev.msf.core.model.MsfLayerIndex;
+import dev.msf.core.model.MsfMetadata;
 import dev.msf.core.model.MsfPalette;
 import dev.msf.core.model.MsfRegion;
 import dev.msf.fabric.world.RegionExtractor;
@@ -96,6 +104,82 @@ public class RegionExtractorTest implements FabricGameTest {
         ctx.assertEquals(2, region.originX(), "originX");
         ctx.assertEquals(1, region.originY(), "originY");
         ctx.assertEquals(2, region.originZ(), "originZ");
+        ctx.complete();
+    }
+
+    // =========================================================================
+    // Biome extraction tests
+    // =========================================================================
+
+    @GameTest(templateName = EMPTY_STRUCTURE)
+    public void includeBiomesPopulatesBiomePalette(TestContext ctx) throws MsfPaletteException {
+        BlockPos anchor = ctx.getAbsolutePos(BlockPos.ORIGIN);
+        BlockPos worldPos = ctx.getAbsolutePos(new BlockPos(1, 1, 1));
+        BlockBox bounds = BlockBox.create(worldPos, worldPos);
+
+        List<String> palette = new ArrayList<>();
+        MsfRegion region = RegionExtractor.extract(
+            ctx.getWorld(), bounds, "biome-test", anchor, true, palette
+        );
+
+        ctx.assertTrue(region.hasBiomeData(),
+            "hasBiomeData() must return true when includeBiomes=true");
+        ctx.assertTrue(!region.biomePalette().isEmpty(),
+            "Biome palette must not be empty after extract with includeBiomes=true");
+        ctx.complete();
+    }
+
+    @GameTest(templateName = EMPTY_STRUCTURE)
+    public void biomeDataLengthMatchesFormula(TestContext ctx) throws MsfPaletteException {
+        // 1×1×1 region: ceil(1/4) × ceil(1/4) × ceil(1/4) = 1 biome entry (Section 7.6)
+        BlockPos anchor = ctx.getAbsolutePos(BlockPos.ORIGIN);
+        BlockPos worldPos = ctx.getAbsolutePos(new BlockPos(1, 1, 1));
+        BlockBox bounds = BlockBox.create(worldPos, worldPos);
+
+        List<String> palette = new ArrayList<>();
+        MsfRegion region = RegionExtractor.extract(
+            ctx.getWorld(), bounds, "r", anchor, true, palette
+        );
+
+        ctx.assertTrue(region.biomeData() != null,
+            "biomeData must not be null when includeBiomes=true");
+        ctx.assertTrue(region.biomeData().length == 1,
+            "biomeData.length must be 1 for 1×1×1 region (ceil(1/4)^3), got "
+            + region.biomeData().length);
+        ctx.complete();
+    }
+
+    @GameTest(templateName = EMPTY_STRUCTURE)
+    public void biomeRoundTripPreservesBiomePalette(TestContext ctx)
+            throws MsfPaletteException, MsfException {
+        BlockPos anchor = ctx.getAbsolutePos(BlockPos.ORIGIN);
+        BlockPos worldPos = ctx.getAbsolutePos(new BlockPos(1, 1, 1));
+        BlockBox bounds = BlockBox.create(worldPos, worldPos);
+
+        List<String> palette = new ArrayList<>();
+        MsfRegion region = RegionExtractor.extract(
+            ctx.getWorld(), bounds, "r", anchor, true, palette
+        );
+        List<String> extractedBiomePalette = new ArrayList<>(region.biomePalette());
+
+        MsfFile file = MsfFile.builder()
+            .mcDataVersion(0L)
+            .metadata(MsfMetadata.builder().name("biome-rt").build())
+            .palette(MsfPalette.of(new ArrayList<>(palette)))
+            .layerIndex(MsfLayerIndex.of(List.of(
+                MsfLayer.builder().layerId(1).name("l").addRegion(region).build()
+            )))
+            .build();
+
+        byte[] bytes = MsfWriter.writeFile(file, null);
+        MsfFile readFile = MsfReader.readFile(bytes, MsfReaderConfig.DEFAULT, null);
+
+        MsfRegion readRegion = readFile.layerIndex().layers().get(0).regions().get(0);
+        ctx.assertTrue(readRegion.hasBiomeData(),
+            "hasBiomeData() must be true after round-trip");
+        ctx.assertTrue(readRegion.biomePalette().equals(extractedBiomePalette),
+            "Biome palette must be preserved. Expected: " + extractedBiomePalette
+            + ", got: " + readRegion.biomePalette());
         ctx.complete();
     }
 }
