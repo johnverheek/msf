@@ -12,3 +12,4 @@ rootProject.name = "msf"
 
 include("msf-core")
 include("msf-fabric")
+include("msf-cli")
