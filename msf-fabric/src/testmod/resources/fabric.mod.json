@@ -15,7 +15,8 @@
       "dev.msf.fabric.test.BlockEntityBridgeTest",
       "dev.msf.fabric.test.DataVersionCheckerTest",
       "dev.msf.fabric.test.EntityBridgeTest",
-      "dev.msf.fabric.test.FullRoundTripTest"
+      "dev.msf.fabric.test.FullRoundTripTest",
+      "dev.msf.fabric.test.MsfCommandsTest"
     ]
   },
   "depends": {

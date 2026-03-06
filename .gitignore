@@ -3,6 +3,9 @@
 build/
 out/
 
+# Minecraft run instance
+run/
+
 # IDE
 .idea/
 .vscode/
