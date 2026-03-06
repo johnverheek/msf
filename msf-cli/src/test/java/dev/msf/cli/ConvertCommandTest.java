@@ -1,5 +1,6 @@
 package dev.msf.cli;
 
+import dev.msf.cli.convert.LitematicaFormatTest;
 import dev.msf.cli.convert.NbtReader;
 import dev.msf.cli.convert.NbtTag;
 import dev.msf.cli.convert.NbtWriter;
@@ -86,7 +87,7 @@ class ConvertCommandTest {
     }
 
     // -------------------------------------------------------------------------
-    // Tests
+    // .nbt ↔ .msf tests (existing)
     // -------------------------------------------------------------------------
 
     @Test
@@ -100,7 +101,6 @@ class ConvertCommandTest {
         assertEquals(0, r.exitCode(), "Exit code should be 0: " + r.stderr());
         assertTrue(Files.exists(msfFile), "Output MSF file must be created");
 
-        // The produced MSF file must be readable
         byte[] msfBytes = Files.readAllBytes(msfFile);
         MsfFile msf = MsfReader.readFile(msfBytes, MsfReaderConfig.DEFAULT, null);
         assertEquals(3953L, msf.header().mcDataVersion());
@@ -114,7 +114,6 @@ class ConvertCommandTest {
 
     @Test
     void convertMsfToNbt_producesReadableNbtFile() throws Exception {
-        // First create a valid .msf via nbt→msf, then convert back
         Path nbtFile = tempDir.resolve("structure.nbt");
         Path msfFile = tempDir.resolve("structure.msf");
         Path nbtOut  = tempDir.resolve("structure_out.nbt");
@@ -126,7 +125,6 @@ class ConvertCommandTest {
         assertEquals(0, r.exitCode(), "Exit code should be 0: " + r.stderr());
         assertTrue(Files.exists(nbtOut), "Output .nbt file must be created");
 
-        // The produced .nbt file must be readable by NbtReader
         byte[] nbtBytes = Files.readAllBytes(nbtOut);
         NbtTag.CompoundTag root = NbtReader.readCompound(nbtBytes);
         assertTrue(root.entries().containsKey("DataVersion"), "Must have DataVersion");
@@ -138,13 +136,12 @@ class ConvertCommandTest {
 
     @Test
     void convertNbtToMsf_roundTrip_preservesBlockCount() throws Exception {
-        // nbt → msf → nbt should preserve block count and palette entries
-        Path nbtIn  = tempDir.resolve("in.nbt");
+        Path nbtIn   = tempDir.resolve("in.nbt");
         Path msfFile = tempDir.resolve("round.msf");
-        Path nbtOut = tempDir.resolve("out.nbt");
+        Path nbtOut  = tempDir.resolve("out.nbt");
         Files.write(nbtIn, minimalVanillaNbt());
 
-        run("convert", nbtIn.toString(),  msfFile.toString());
+        run("convert", nbtIn.toString(),   msfFile.toString());
         run("convert", msfFile.toString(), nbtOut.toString());
 
         NbtTag.CompoundTag original  = NbtReader.readCompound(Files.readAllBytes(nbtIn));
@@ -173,5 +170,81 @@ class ConvertCommandTest {
         Files.write(txtFile, new byte[]{1, 2, 3});
         RunResult r = run("convert", txtFile.toString(), tempDir.resolve("out.msf").toString());
         assertNotEquals(0, r.exitCode(), "Exit code should be non-zero for unsupported extension");
+    }
+
+    // -------------------------------------------------------------------------
+    // .litematic ↔ .msf /.nbt tests (new)
+    // -------------------------------------------------------------------------
+
+    /**
+     * .litematic → .msf round trip: read back converted file, block at known position matches.
+     */
+    @Test
+    void convertLitematicToMsf_roundTrip_blockAtKnownPositionMatches() throws Exception {
+        Path litematicFile = tempDir.resolve("test.litematic");
+        Path msfFile       = tempDir.resolve("test.msf");
+        Files.write(litematicFile, LitematicaFormatTest.twoSubregionFixtureBytes());
+
+        RunResult r = run("convert", litematicFile.toString(), msfFile.toString());
+        assertEquals(0, r.exitCode(), "Exit code should be 0: " + r.stderr());
+        assertTrue(Files.exists(msfFile), "Output MSF file must be created");
+
+        byte[] msfBytes = Files.readAllBytes(msfFile);
+        MsfFile msf = MsfReader.readFile(msfBytes, MsfReaderConfig.DEFAULT, null);
+
+        assertEquals(2, msf.layerIndex().layers().size(), "Must have 2 layers from 2 subregions");
+
+        // Subregion1 at anchor (0,0,0): block (0,0,0) must be stone
+        var layer1 = msf.layerIndex().layers().stream()
+                .filter(l -> "Subregion1".equals(l.name())).findFirst().orElseThrow();
+        int stoneId = msf.palette().entries().indexOf("minecraft:stone");
+        assertNotEquals(-1, stoneId, "stone must be in global palette");
+        assertEquals(stoneId, layer1.regions().get(0).blockData()[0],
+                "block at (0,0,0) in Subregion1 must be stone");
+    }
+
+    /**
+     * .msf → .litematic round trip: read back converted file, subregion count matches layer count.
+     */
+    @Test
+    void convertMsfToLitematic_roundTrip_subregionCountMatchesLayerCount() throws Exception {
+        Path litematicIn  = tempDir.resolve("in.litematic");
+        Path msfFile      = tempDir.resolve("mid.msf");
+        Path litematicOut = tempDir.resolve("out.litematic");
+        Files.write(litematicIn, LitematicaFormatTest.twoSubregionFixtureBytes());
+
+        run("convert", litematicIn.toString(), msfFile.toString());
+        RunResult r = run("convert", msfFile.toString(), litematicOut.toString());
+        assertEquals(0, r.exitCode(), "Exit code should be 0: " + r.stderr());
+        assertTrue(Files.exists(litematicOut), "Output .litematic must be created");
+
+        byte[] litBytes = Files.readAllBytes(litematicOut);
+        NbtTag.CompoundTag root = NbtReader.readCompound(litBytes);
+        NbtTag.CompoundTag regions = (NbtTag.CompoundTag) root.entries().get("Regions");
+        assertNotNull(regions, "Regions compound must be present");
+
+        byte[] msfBytes = Files.readAllBytes(msfFile);
+        MsfFile msf = MsfReader.readFile(msfBytes, MsfReaderConfig.DEFAULT, null);
+        assertEquals(msf.layerIndex().layers().size(), regions.entries().size(),
+                "subregion count must match MSF layer count");
+    }
+
+    /**
+     * .litematic → .nbt via MSF intermediate: completes without error.
+     */
+    @Test
+    void convertLitematicToNbt_viaMsfIntermediate_completesWithoutError() throws Exception {
+        Path litematicFile = tempDir.resolve("test.litematic");
+        Path nbtOut        = tempDir.resolve("test.nbt");
+        Files.write(litematicFile, LitematicaFormatTest.twoSubregionFixtureBytes());
+
+        RunResult r = run("convert", litematicFile.toString(), nbtOut.toString());
+        assertEquals(0, r.exitCode(), "Exit code should be 0: " + r.stderr());
+        assertTrue(Files.exists(nbtOut), "Output .nbt file must be created");
+
+        byte[] nbtBytes = Files.readAllBytes(nbtOut);
+        NbtTag.CompoundTag root = NbtReader.readCompound(nbtBytes);
+        assertTrue(root.entries().containsKey("blocks"),  "Must have blocks");
+        assertTrue(root.entries().containsKey("palette"), "Must have palette");
     }
 }
