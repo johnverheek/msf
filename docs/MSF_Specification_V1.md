@@ -388,7 +388,7 @@ Viewport slicing is a tool feature. Semantic layers are a format feature. These 
 
 Feature flag bit 7 ("Has construction layers") is reserved in V1.0. The layer index block is required unconditionally in all MSF files and is not gated by bit 7. Bit 7 is reserved for a future extended construction layer block not yet defined in this version of the specification.
 
-> **Note (non-normative):** The u8 layer count and region count fields impose a maximum of 255 layers and 255 regions per layer in V1.0. For the vast majority of schematics this is sufficient. A future minor version may introduce a large-structure mode using u16 or u32 counts via a reserved feature flag. Writers encountering these limits in V1.0 MUST throw rather than truncate — see Section 6.4.
+> **Note (non-normative):** The u8 layer count and region count fields impose a maximum of 255 layers and 255 regions per layer in V1.0. For the vast majority of schematics this is sufficient. A future minor version may introduce a large-structure mode using u16 or u32 counts via a reserved feature flag. Writers encountering these limits in V1.0 must throw rather than truncate — see Section 6.4.
 
 ### 6.2 Layout
 
@@ -438,7 +438,6 @@ Each region is a three-dimensional subvolume of block data associated with a lay
 ### 7.1 Region Header
 
 ```
-str     Region name
 i32     Origin X (relative to schematic anchor)
 i32     Origin Y (relative to schematic anchor)
 i32     Origin Z (relative to schematic anchor)
@@ -457,7 +456,7 @@ The compressed data length field contains the byte length of the compressed regi
 
 The uncompressed data length field contains the expected byte length of the payload after decompression. Writers MUST set this field to the exact byte length of the uncompressed payload. Readers SHOULD verify that the decompressed output byte length matches this field and MUST throw MsfParseException if a mismatch is detected.
 
-> **Note (non-normative):** Writers producing regions from large builds SHOULD consider splitting volumes exceeding approximately 128–256 blocks per axis into multiple regions within a layer. Very large single regions increase peak memory requirements during decompression and reduce the granularity available to tools for visibility toggling and incremental loading. This is guidance only — the format imposes no maximum region size beyond the u32 field constraints.
+> **Note (non-normative):** Writers producing regions from large builds should consider splitting volumes exceeding approximately 128–256 blocks per axis into multiple regions within a layer. Very large single regions increase peak memory requirements during decompression and reduce the granularity available to tools for visibility toggling and incremental loading. This is guidance only — the format imposes no maximum region size beyond the u32 field constraints.
 
 ### 7.2 Compression Types
 
@@ -591,14 +590,14 @@ Packed block data values MUST be valid palette IDs — each value MUST be less t
 > - **Entries 0–8 (ID 1 = binary `001`):** Occupy bits 0–26 of word 0. Because ID 1 has only its bit 0 set, bits 0, 3, 6, 9, 12, 15, 18, 21, and 24 are set in word 0.
 > - **Entries 9–17 (ID 2 = binary `010`):** Occupy bits 27–53 of word 0. Because ID 2 has only its bit 1 set, bits 28, 31, 34, 37, 40, 43, 46, 49, and 52 are set in word 0.
 > - **Entries 18–20 (ID 0 = binary `000`):** Occupy bits 54–62 of word 0. No bits set.
-> - **Entry 21 (ID 0 = binary `000`) — word boundary span:** Entry 21 would occupy bits 63–65. Bit 63 falls in word 0; bits 64–65 fall in word 1. The low bit of entry 21's value (0) goes to bit 63 of word 0; the remaining two bits of the value (both 0) go to bits 0–1 of word 1. Bit 63 of word 0 is not set. This is the word boundary case: the entry starts in word 0 and continues in word 1.
+> - **Entry 21 (ID 0 = binary `000`) — word boundary span:** Entry 21 would occupy bits 63–65. Bit 63 falls in word 0; bits 64–65 fall in word 1. Because the value is 0, no bits are set in either word. This is the word boundary case: the entry begins in word 0 and continues in word 1. The remaining bits of word 0 (bit 63 here) are zeroed padding, and reading resumes at bit 0 of word 1 for the continuation of this entry.
 > - **Entries 22–26 (ID 0):** Occupy bits 2–16 of word 1. No bits set.
 > - **Bits 17–63 of word 1:** Padding zeros, ignored by readers.
 >
 > Word 0 has set bits at positions: 0, 3, 6, 9, 12, 15, 18, 21, 24, 28, 31, 34, 37, 40, 43, 46, 49, 52.
 > Word 1 is all zeros.
 >
-> The packed array stored in the file is these two u64 words, each in little-endian byte order. A reader unpacks by extracting 3 bits at a time starting from bit 0 of word 0, skipping to the next word when a 3-bit window would span the word boundary (not consuming the straddle — the remainder of the current word is discarded and the entry begins at bit 0 of the next word).
+> The packed array stored in the file is these two u64 words, each in little-endian byte order. A reader unpacks by extracting 3 bits at a time starting from bit 0 of word 0, skipping to the next word when a 3-bit window would span the word boundary — the remaining bits of the current word are discarded as padding and the entry begins at bit 0 of the next word.
 
 ### 7.6 Biome Data
 
@@ -943,7 +942,7 @@ Offset  Bytes               Field
 18      9A 00 00 00         Layer index offset: 154 (0x9A)
 1C      00 00 00 00         Entity block offset: 0 (absent)
 20      00 00 00 00         Block entity block offset: 0 (absent)
-24      E6 00 00 00         File size: 230 bytes
+24      E0 00 00 00         File size: 224 bytes
 28      xx xx xx xx         Header checksum: xxHash3-64(bytes 0–39),
         xx xx xx xx         8 bytes little-endian — see repository file
                             for the exact value
@@ -957,15 +956,15 @@ The block length is 64 (the 4-byte length field itself is not counted). The bloc
 
 Block length 34. Entry count 2. Entry 0: `minecraft:air` (13 bytes). Entry 1: `minecraft:stone` (15 bytes).
 
-**Layer index block (68 bytes at offset 154):**
+**Layer index block (62 bytes at offset 154):**
 
-Block length 64. Layer count 1. Single layer: ID 0, name `"main"`, construction order 0, no dependencies, flags 0x00, region count 1. Single region: name `"main"`, origin (0, 0, 0), size (1, 1, 1), compression 0x00 (none), compressed data length 13, uncompressed data length 13.
+Block length 58. Layer count 1. Single layer: ID 0, name `"main"`, construction order 0, no dependencies, flags 0x00, region count 1. Single region: origin (0, 0, 0), size (1, 1, 1), compression 0x00 (none), compressed data length 13, uncompressed data length 13.
 
 Region payload (13 bytes, uncompressed): bits per entry 1 (because `max(1, ceil(log2(2))) = 1`), packed array length 1 (`ceil(1×1×1×1 / 64) = 1`), packed data `01 00 00 00 00 00 00 00` (palette ID 1 = stone stored in the least significant bit of the single u64 word).
 
-**File checksum (8 bytes at offset 222):**
+**File checksum (8 bytes at offset 216):**
 
-The xxHash3-64 digest with seed 0 of bytes 0–221. See the repository file for the exact value.
+The xxHash3-64 digest with seed 0 of bytes 0–215. See the repository file for the exact value.
 
 > **Note (non-normative):** The reference files in `docs/examples/` are the authoritative binary targets. The values described in this appendix are correct for the file as committed. Implementers building test suites are encouraged to verify byte-for-byte against the committed files rather than recomputing from this prose description.
 
@@ -985,7 +984,7 @@ The layer index block contains layer count = 2, followed by two layer records in
 - Dependency count: `0` (no dependencies)
 - Flags: `0x00`
 - Region count: `1`
-- One region header follows, describing the stone blocks.
+- One region header follows, describing the stone blocks. The region header begins directly with the origin coordinates — there is no region name field.
 
 **Layer 1 — redstone:**
 
@@ -1004,6 +1003,6 @@ A reader reconstructing placement order groups layers by construction order inde
 
 **Dependency field encoding on the wire:**
 
-The dependency count byte for layer 1 is `0x01`. The single dependent layer ID byte immediately following is `0x00`. A reader parsing the layer record reads dependency count, then reads exactly that many u8 bytes as the dependency list.
+The dependency count byte for layer 1 is `0x01`. The single dependent layer ID byte immediately following is `0x00`. A reader parsing the layer record reads the dependency count, then reads exactly that many u8 bytes as the dependency list.
 
 The full binary layout of this file, with annotated hex, is committed to `docs/examples/two_layer_redstone.msf` in the repository.

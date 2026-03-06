@@ -24,9 +24,8 @@ import java.util.function.Consumer;
 /**
  * A three-dimensional subvolume of block data associated with a layer.
  *
- * <h2>Region header layout (Section 7.1)</h2>
+ * <h2>Region header layout (Section 7.1 — V1_N)</h2>
  * <pre>
- *     str     region name
  *     i32     origin X (relative to schematic anchor)
  *     i32     origin Y (relative to schematic anchor)
  *     i32     origin Z (relative to schematic anchor)
@@ -56,9 +55,6 @@ public final class MsfRegion {
     // Fields
     // -------------------------------------------------------------------------
 
-    /** Region name (Section 7.1). */
-    private final String name;
-
     /** Origin X, relative to schematic anchor (Section 7.7). */
     private final int originX;
 
@@ -76,6 +72,12 @@ public final class MsfRegion {
 
     /** Size on the Z axis. MUST be ≥ 1 (Section 7.1). */
     private final int sizeZ;
+
+    /**
+     * Compression type as parsed from the region header (Section 7.2).
+     * For regions built programmatically, defaults to {@link CompressionType#ZSTD}.
+     */
+    private final CompressionType compressionType;
 
     /**
      * Block data in YZX order. Each entry is a palette ID (0-based index into the global palette).
@@ -101,20 +103,20 @@ public final class MsfRegion {
     // -------------------------------------------------------------------------
 
     private MsfRegion(
-        String name,
         int originX, int originY, int originZ,
         int sizeX, int sizeY, int sizeZ,
+        CompressionType compressionType,
         int[] blockData,
         int[] biomeData,
         List<String> biomePalette
     ) {
-        this.name = name;
         this.originX = originX;
         this.originY = originY;
         this.originZ = originZ;
         this.sizeX = sizeX;
         this.sizeY = sizeY;
         this.sizeZ = sizeZ;
+        this.compressionType = compressionType;
         this.blockData = Arrays.copyOf(blockData, blockData.length);
         this.biomeData = biomeData == null ? null : Arrays.copyOf(biomeData, biomeData.length);
         this.biomePalette = biomeData == null
@@ -126,13 +128,19 @@ public final class MsfRegion {
     // Accessors
     // -------------------------------------------------------------------------
 
-    public String name() { return name; }
     public int originX() { return originX; }
     public int originY() { return originY; }
     public int originZ() { return originZ; }
     public int sizeX() { return sizeX; }
     public int sizeY() { return sizeY; }
     public int sizeZ() { return sizeZ; }
+
+    /**
+     * Returns the compression type as parsed from the region header (Section 7.2).
+     *
+     * @return the compression type; never {@code null}
+     */
+    public CompressionType compressionType() { return compressionType; }
 
     /** Palette IDs in YZX order. Never null; length = sizeX * sizeY * sizeZ. */
     public int[] blockData() { return Arrays.copyOf(blockData, blockData.length); }
@@ -156,21 +164,23 @@ public final class MsfRegion {
     public static Builder builder() { return new Builder(); }
 
     public static final class Builder {
-        private String name = "";
         private int originX, originY, originZ;
         private int sizeX = 1, sizeY = 1, sizeZ = 1;
+        private CompressionType compressionType = CompressionType.ZSTD;
         private int[] blockData;
         private int[] biomeData;
         private List<String> biomePalette;
 
         private Builder() {}
 
-        public Builder name(String n) { this.name = n; return this; }
         public Builder origin(int x, int y, int z) {
             this.originX = x; this.originY = y; this.originZ = z; return this;
         }
         public Builder size(int x, int y, int z) {
             this.sizeX = x; this.sizeY = y; this.sizeZ = z; return this;
+        }
+        public Builder compressionType(CompressionType ct) {
+            this.compressionType = ct; return this;
         }
         public Builder blockData(int[] data) { this.blockData = Arrays.copyOf(data, data.length); return this; }
         public Builder biomeData(int[] data, List<String> palette) {
@@ -194,8 +204,8 @@ public final class MsfRegion {
                     + " for region " + sizeX + "x" + sizeY + "x" + sizeZ
                 );
             }
-            return new MsfRegion(name, originX, originY, originZ, sizeX, sizeY, sizeZ,
-                blockData, biomeData, biomePalette);
+            return new MsfRegion(originX, originY, originZ, sizeX, sizeY, sizeZ,
+                compressionType, blockData, biomeData, biomePalette);
         }
     }
 
@@ -221,7 +231,7 @@ public final class MsfRegion {
             throws MsfCompressionException {
         if (hasBiomes && !hasBiomeData()) {
             throw new IllegalArgumentException(
-                "Region '" + name + "': hasBiomes=true but no biome data is present"
+                "hasBiomes=true but no biome data is present in this region"
             );
         }
 
@@ -232,8 +242,6 @@ public final class MsfRegion {
         // Build the region header bytes (everything before the payload)
         ByteArrayOutputStream out = new ByteArrayOutputStream();
         try {
-            // str: region name
-            writeStr(out, name);
             // i32: origin X, Y, Z
             writeI32(out, originX);
             writeI32(out, originY);
@@ -279,14 +287,6 @@ public final class MsfRegion {
 
     /**
      * Builds the biome data section of the region payload (Section 7.6).
-     * Layout:
-     * <pre>
-     *     u16     biome palette entry count
-     *       str[] biome identifier strings
-     *     u8      biome bits per entry
-     *     u32     biome packed array length
-     *     u64[]   packed biome data
-     * </pre>
      */
     private byte[] buildBiomeSection() {
         int bpe = BitPackedArray.bitsPerEntry(biomePalette.size());
@@ -294,16 +294,12 @@ public final class MsfRegion {
 
         ByteArrayOutputStream out = new ByteArrayOutputStream();
         try {
-            // u16 biome palette entry count
             writeU16(out, biomePalette.size());
             for (String biome : biomePalette) {
                 writeStr(out, biome);
             }
-            // u8 biome bits per entry
             out.write(bpe & 0xFF);
-            // u32 biome packed array length
             writeU32(out, words.length);
-            // u64[] packed biome data
             ByteBuffer wordBuf = ByteBuffer.allocate(words.length * 8).order(ByteOrder.LITTLE_ENDIAN);
             for (long w : words) wordBuf.putLong(w);
             out.write(wordBuf.array());
@@ -321,7 +317,7 @@ public final class MsfRegion {
      * Parses a region from the given buffer, positioned at the start of the region header.
      * The buffer position is advanced past all consumed bytes.
      *
-     * @param buf             the buffer positioned at the region header (str: region name)
+     * @param buf             the buffer positioned at the region header (i32: origin X)
      * @param paletteSize     the global palette entry count (for range validation)
      * @param hasBiomes       whether biome data is expected (feature flag bit 2)
      * @param warningConsumer warning consumer; may be null
@@ -335,9 +331,6 @@ public final class MsfRegion {
         boolean hasBiomes,
         Consumer<MsfWarning> warningConsumer
     ) throws MsfParseException, MsfCompressionException {
-        // str: region name
-        String name = readStr(buf);
-
         // i32: origin X, Y, Z
         int originX = buf.getInt();
         int originY = buf.getInt();
@@ -351,13 +344,10 @@ public final class MsfRegion {
         // Validate sizes ≥ 1 (Section 7.1)
         if (rawSizeX < 1 || rawSizeY < 1 || rawSizeZ < 1) {
             throw new MsfParseException(String.format(
-                "Region '%s' has invalid size %dx%dx%d — each axis must be ≥ 1 (Section 7.1)",
-                name, rawSizeX, rawSizeY, rawSizeZ
+                "Region has invalid size %dx%dx%d — each axis must be ≥ 1 (Section 7.1)",
+                rawSizeX, rawSizeY, rawSizeZ
             ));
         }
-        // Safe cast — any value ≥ 1 that was stored in a u32 is at most 4294967295,
-        // which exceeds Integer.MAX_VALUE. We cap at Integer.MAX_VALUE to avoid overflow,
-        // but in practice a region that large would be rejected by the array allocation below.
         int sizeX = (int) Math.min(rawSizeX, Integer.MAX_VALUE);
         int sizeY = (int) Math.min(rawSizeY, Integer.MAX_VALUE);
         int sizeZ = (int) Math.min(rawSizeZ, Integer.MAX_VALUE);
@@ -373,13 +363,13 @@ public final class MsfRegion {
 
         if (compressedLen > buf.remaining()) {
             throw new MsfParseException(String.format(
-                "Region '%s': compressed_data_length %d exceeds remaining buffer %d",
-                name, compressedLen, buf.remaining()
+                "Region: compressed_data_length %d exceeds remaining buffer %d",
+                compressedLen, buf.remaining()
             ));
         }
         if (uncompressedLen > Integer.MAX_VALUE) {
             throw new MsfParseException(
-                "Region '" + name + "': uncompressed_data_length " + uncompressedLen + " exceeds Integer.MAX_VALUE"
+                "Region: uncompressed_data_length " + uncompressedLen + " exceeds Integer.MAX_VALUE"
             );
         }
 
@@ -391,8 +381,8 @@ public final class MsfRegion {
         byte[] payload = RegionDecompressor.decompress(compressed, comprType, (int) uncompressedLen);
         if (payload.length != (int) uncompressedLen) {
             throw new MsfParseException(String.format(
-                "Region '%s': decompressed length %d != declared uncompressed_data_length %d",
-                name, payload.length, uncompressedLen
+                "Region: decompressed length %d != declared uncompressed_data_length %d",
+                payload.length, uncompressedLen
             ));
         }
 
@@ -409,15 +399,14 @@ public final class MsfRegion {
         if (hasBiomes) {
             if (!payloadBuf.hasRemaining()) {
                 throw new MsfParseException(
-                    "Region '" + name + "': feature flag bit 2 (HAS_BIOME_DATA) is set but "
+                    "Region: feature flag bit 2 (HAS_BIOME_DATA) is set but "
                     + "no biome data found in region payload (Section 7.3)"
                 );
             }
-            // Parse biome section
             int biomePaletteCount = Short.toUnsignedInt(payloadBuf.getShort());
             if (biomePaletteCount == 0) {
                 throw new MsfParseException(
-                    "Region '" + name + "': biome palette entry count is 0, which is invalid (Section 7.6)"
+                    "Region: biome palette entry count is 0, which is invalid (Section 7.6)"
                 );
             }
             biomePalette = new ArrayList<>(biomePaletteCount);
@@ -428,12 +417,11 @@ public final class MsfRegion {
             int biomeBpe = Byte.toUnsignedInt(payloadBuf.get());
             if (biomeBpe == 0) {
                 throw new MsfParseException(
-                    "Region '" + name + "': biome bits_per_entry is 0, which is invalid (Section 7.6)"
+                    "Region: biome bits_per_entry is 0, which is invalid (Section 7.6)"
                 );
             }
             long storedBiomeWordCount = Integer.toUnsignedLong(payloadBuf.getInt());
 
-            // Compute expected biome entry count and word count
             long beCX = divCeil(sizeX, 4);
             long beCY = divCeil(sizeY, 4);
             long beCZ = divCeil(sizeZ, 4);
@@ -442,14 +430,14 @@ public final class MsfRegion {
 
             if (storedBiomeWordCount != expectedBiomeWords) {
                 throw new MsfParseException(String.format(
-                    "Region '%s': biome_packed_array_length mismatch: stored %d, expected %d "
+                    "Region: biome_packed_array_length mismatch: stored %d, expected %d "
                     + "(biomeEntryCount=%d, biomeBpe=%d)",
-                    name, storedBiomeWordCount, expectedBiomeWords, biomeEntryCount, biomeBpe
+                    storedBiomeWordCount, expectedBiomeWords, biomeEntryCount, biomeBpe
                 ));
             }
             if (storedBiomeWordCount > Integer.MAX_VALUE) {
                 throw new MsfParseException(
-                    "Region '" + name + "': biome packed array length exceeds allocatable size"
+                    "Region: biome packed array length exceeds allocatable size"
                 );
             }
             long[] biomeWords = new long[(int) storedBiomeWordCount];
@@ -458,28 +446,24 @@ public final class MsfRegion {
             }
             if (biomeEntryCount > Integer.MAX_VALUE) {
                 throw new MsfParseException(
-                    "Region '" + name + "': biome entry count exceeds int[] maximum"
+                    "Region: biome entry count exceeds int[] maximum"
                 );
             }
             biomeData = BitPackedArray.unpack(biomeWords, (int) biomeEntryCount, biomeBpe);
 
-            // Validate biome ID range
             for (int i = 0; i < biomeData.length; i++) {
                 if (biomeData[i] >= biomePaletteCount) {
                     throw new MsfParseException(String.format(
-                        "Region '%s': biome data at index %d contains out-of-range biome ID %d "
+                        "Region: biome data at index %d contains out-of-range biome ID %d "
                         + "(biome palette has %d entries)",
-                        name, i, biomeData[i], biomePaletteCount
+                        i, biomeData[i], biomePaletteCount
                     ));
                 }
             }
-        } else {
-            // Feature flag bit 2 not set — must NOT attempt to read biome data.
-            // Any remaining bytes in the payload are ignored (forward compatibility).
         }
 
-        return new MsfRegion(name, originX, originY, originZ, sizeX, sizeY, sizeZ,
-            blockData, biomeData, biomePalette);
+        return new MsfRegion(originX, originY, originZ, sizeX, sizeY, sizeZ,
+            comprType, blockData, biomeData, biomePalette);
     }
 
     // -------------------------------------------------------------------------

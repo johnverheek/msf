@@ -14,7 +14,7 @@ import picocli.CommandLine.Command;
  */
 @Command(
     name = "msf",
-    subcommands = {InspectCommand.class, ValidateCommand.class},
+    subcommands = {InspectCommand.class, ValidateCommand.class, ConvertCommand.class},
     mixinStandardHelpOptions = true,
     version = "msf-cli 1.0",
     description = "MSF (Minecraft Structured Format) command-line tool."

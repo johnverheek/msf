@@ -49,7 +49,6 @@ final class FixtureUtil {
         MsfPalette palette = MsfPalette.of(List.of("minecraft:stone"));
 
         MsfRegion region = MsfRegion.builder()
-                .name("main")
                 .size(2, 2, 2)
                 .blockData(new int[]{0, 1, 1, 0, 1, 0, 0, 1})
                 .build();
@@ -85,7 +84,6 @@ final class FixtureUtil {
         MsfPalette palette = MsfPalette.of(List.of("minecraft:stone"));
 
         MsfRegion region = MsfRegion.builder()
-                .name("r")
                 .size(1, 1, 1)
                 .blockData(new int[]{0})
                 .build();
@@ -137,7 +135,6 @@ final class FixtureUtil {
         MsfPalette palette = MsfPalette.of(List.of("minecraft:stone", "minecraft:grass"));
 
         MsfRegion region = MsfRegion.builder()
-                .name("r")
                 .size(1, 1, 1)
                 .blockData(new int[]{0})
                 .build();
@@ -192,7 +189,6 @@ final class FixtureUtil {
         MsfPalette palette = MsfPalette.of(List.of("minecraft:stone"));
 
         MsfRegion region = MsfRegion.builder()
-                .name("")     // empty name → u16(0) = 2 bytes
                 .size(1, 1, 1)
                 .blockData(new int[]{0})
                 .build();
@@ -226,12 +222,11 @@ final class FixtureUtil {
         //   u8  flags=0           (1 byte)   → lio+10
         //   u8  regionCount=1     (1 byte)   → lio+11
         //   Region 0 starts at lio+12:
-        //     u16 name=""         (2 bytes)  → lio+12
-        //     i32 originX         (4 bytes)  → lio+14
-        //     i32 originY         (4 bytes)  → lio+18
-        //     i32 originZ         (4 bytes)  → lio+22
-        //     u32 sizeX           (4 bytes)  → lio+26  ← overwrite this
-        int sizeXOffset = lio + 26;
+        //     i32 originX         (4 bytes)  → lio+12
+        //     i32 originY         (4 bytes)  → lio+16
+        //     i32 originZ         (4 bytes)  → lio+20
+        //     u32 sizeX           (4 bytes)  → lio+24  ← overwrite this
+        int sizeXOffset = lio + 24;
         bytes[sizeXOffset]     = 0;
         bytes[sizeXOffset + 1] = 0;
         bytes[sizeXOffset + 2] = 0;

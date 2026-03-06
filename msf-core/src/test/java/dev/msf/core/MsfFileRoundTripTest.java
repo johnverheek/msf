@@ -53,7 +53,6 @@ class MsfFileRoundTripTest {
                 .layerId(1)
                 .name("Main")
                 .addRegion(MsfRegion.builder()
-                    .name("region1")
                     .origin(0, 0, 0)
                     .size(4, 4, 4)
                     .build())

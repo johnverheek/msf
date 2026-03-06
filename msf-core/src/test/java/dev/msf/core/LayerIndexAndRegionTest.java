@@ -30,7 +30,6 @@ class LayerIndexAndRegionTest {
     private static MsfRegion simpleRegion(String name) {
         // 2×3×4 region, all blocks = palette ID 0 (air)
         return MsfRegion.builder()
-                .name(name)
                 .origin(0, 0, 0)
                 .size(2, 3, 4)
                 .build();
@@ -62,7 +61,6 @@ class LayerIndexAndRegionTest {
         assertEquals(1, parsedLayer.layerId());
         assertEquals("Foundation", parsedLayer.name());
         assertEquals(1, parsedLayer.regions().size());
-        assertEquals("main", parsedLayer.regions().get(0).name());
     }
 
     @Test
@@ -257,7 +255,6 @@ class LayerIndexAndRegionTest {
             blockData[i] = i % paletteSize;
 
         MsfRegion original = MsfRegion.builder()
-                .name("test region")
                 .origin(10, 20, 30)
                 .size(sizeX, sizeY, sizeZ)
                 .blockData(blockData)
@@ -275,7 +272,6 @@ class LayerIndexAndRegionTest {
         MsfLayerIndex parsed = MsfLayerIndex.fromBytes(bytes, 0, paletteSize, false, null);
 
         MsfRegion parsedRegion = parsed.layers().get(0).regions().get(0);
-        assertEquals("test region", parsedRegion.name());
         assertEquals(10, parsedRegion.originX());
         assertEquals(20, parsedRegion.originY());
         assertEquals(30, parsedRegion.originZ());
@@ -293,7 +289,6 @@ class LayerIndexAndRegionTest {
         int[] blockData = new int[total]; // all zeros = all air
 
         MsfRegion region = MsfRegion.builder()
-                .name("all air")
                 .size(sizeX, sizeY, sizeZ)
                 .blockData(blockData)
                 .build();
@@ -328,7 +323,6 @@ class LayerIndexAndRegionTest {
         List<String> biomePalette = List.of("minecraft:plains", "minecraft:forest", "minecraft:ocean");
 
         MsfRegion region = MsfRegion.builder()
-                .name("biomed region")
                 .size(sizeX, sizeY, sizeZ)
                 .blockData(blockData)
                 .biomeData(biomeData, biomePalette)
@@ -349,7 +343,6 @@ class LayerIndexAndRegionTest {
     void region_noBiomeData_whenFlagNotSet() throws Exception {
         int[] blockData = new int[8];
         MsfRegion region = MsfRegion.builder()
-                .name("no biomes")
                 .size(2, 2, 2)
                 .blockData(blockData)
                 .build();
@@ -370,7 +363,6 @@ class LayerIndexAndRegionTest {
         // expected
         int[] blockData = new int[8];
         MsfRegion region = MsfRegion.builder()
-                .name("no biomes")
                 .size(2, 2, 2)
                 .blockData(blockData)
                 .build();
@@ -408,7 +400,6 @@ class LayerIndexAndRegionTest {
         int paletteSize = 4;
         int[] blockData = { 0, 1, 2, 3 };
         MsfRegion region = MsfRegion.builder()
-                .name("r")
                 .size(2, 2, 1)
                 .blockData(blockData)
                 .build();
@@ -444,9 +435,9 @@ class LayerIndexAndRegionTest {
 
     @Test
     void region_sizeZero_throwsIllegalArgument() {
-        assertThrows(IllegalArgumentException.class, () -> MsfRegion.builder().name("zero").size(0, 4, 4).build());
-        assertThrows(IllegalArgumentException.class, () -> MsfRegion.builder().name("zero").size(4, 0, 4).build());
-        assertThrows(IllegalArgumentException.class, () -> MsfRegion.builder().name("zero").size(4, 4, 0).build());
+        assertThrows(IllegalArgumentException.class, () -> MsfRegion.builder().size(0, 4, 4).build());
+        assertThrows(IllegalArgumentException.class, () -> MsfRegion.builder().size(4, 0, 4).build());
+        assertThrows(IllegalArgumentException.class, () -> MsfRegion.builder().size(4, 4, 0).build());
     }
 
     // =========================================================================

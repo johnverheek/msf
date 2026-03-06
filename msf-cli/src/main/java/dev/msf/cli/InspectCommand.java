@@ -2,7 +2,6 @@ package dev.msf.cli;
 
 import dev.msf.core.MsfException;
 import dev.msf.core.MsfWarning;
-import dev.msf.core.compression.CompressionType;
 import dev.msf.core.io.MsfReader;
 import dev.msf.core.io.MsfReaderConfig;
 import dev.msf.core.model.MsfFile;
@@ -14,8 +13,6 @@ import picocli.CommandLine.Command;
 import picocli.CommandLine.Parameters;
 
 import java.io.IOException;
-import java.nio.ByteBuffer;
-import java.nio.ByteOrder;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Instant;
@@ -152,7 +149,7 @@ public class InspectCommand implements Callable<Integer> {
         }
         line("Total regions", String.valueOf(totalRegions));
         line("Total blocks", String.valueOf(totalBlocks));
-        line("Compression", compressionSummary(fileBytes, hdr));
+        line("Compression", compressionSummary(msf));
 
         // --- Optional blocks ---
         System.out.println();
@@ -267,57 +264,13 @@ public class InspectCommand implements Callable<Integer> {
         };
     }
 
-    /**
-     * Parses the compression type byte from each region header in the raw file bytes.
-     * Region header structure (inside layer index block body):
-     *   u8 layerId, str name, u8 order, u8 depCount, u8[] deps, u8 flags, u8 regionCount,
-     *   [per region] str name, 3×i32 origin, 3×u32 size, u8 comprType, u32 compressedLen, u32 uncompressedLen, u8[] data
-     */
-    private static String compressionSummary(byte[] fileBytes, MsfHeader hdr) {
-        try {
-            int lio = (int) hdr.layerIndexOffset();
-            ByteBuffer buf = ByteBuffer.wrap(fileBytes, lio, fileBytes.length - lio)
-                    .order(ByteOrder.LITTLE_ENDIAN);
-            buf.getInt(); // block_length
-            int layerCount = Byte.toUnsignedInt(buf.get());
-
-            Set<String> typeNames = new LinkedHashSet<>();
-            for (int i = 0; i < layerCount; i++) {
-                buf.get(); // layerId
-                skipStr(buf); // layer name
-                buf.get(); // constructionOrder
-                int depCount = Byte.toUnsignedInt(buf.get());
-                buf.position(buf.position() + depCount); // skip deps
-                buf.get(); // flags
-                int regionCount = Byte.toUnsignedInt(buf.get());
-
-                for (int r = 0; r < regionCount; r++) {
-                    skipStr(buf); // region name
-                    buf.getInt(); buf.getInt(); buf.getInt(); // origins (3×i32)
-                    buf.getInt(); buf.getInt(); buf.getInt(); // sizes (3×u32)
-                    int comprByte = Byte.toUnsignedInt(buf.get());
-                    long compressedLen = Integer.toUnsignedLong(buf.getInt());
-                    buf.getInt(); // uncompressedLen
-                    buf.position(buf.position() + (int) compressedLen); // skip payload
-
-                    typeNames.add(compressionTypeName(comprByte));
-                }
+    private static String compressionSummary(MsfFile msf) {
+        Set<String> typeNames = new LinkedHashSet<>();
+        for (MsfLayer layer : msf.layerIndex().layers()) {
+            for (MsfRegion region : layer.regions()) {
+                typeNames.add(region.compressionType().name().toLowerCase());
             }
-            return typeNames.isEmpty() ? "none" : String.join(", ", typeNames);
-        } catch (Exception e) {
-            return "(unknown)";
         }
-    }
-
-    private static void skipStr(ByteBuffer buf) {
-        int len = Short.toUnsignedInt(buf.getShort());
-        buf.position(buf.position() + len);
-    }
-
-    private static String compressionTypeName(int comprByte) {
-        for (CompressionType ct : CompressionType.values()) {
-            if (ct.byteValue == comprByte) return ct.name().toLowerCase();
-        }
-        return "unknown(0x" + Integer.toHexString(comprByte) + ")";
+        return typeNames.isEmpty() ? "none" : String.join(", ", typeNames);
     }
 }

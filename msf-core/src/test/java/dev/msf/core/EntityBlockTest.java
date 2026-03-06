@@ -38,7 +38,7 @@ class EntityBlockTest {
             .palette(MsfPalette.of(List.of("minecraft:stone")))
             .layerIndex(MsfLayerIndex.of(List.of(
                 MsfLayer.builder().layerId(1).name("Main")
-                    .addRegion(MsfRegion.builder().name("r").origin(0, 0, 0).size(1, 1, 1).build())
+                    .addRegion(MsfRegion.builder().origin(0, 0, 0).size(1, 1, 1).build())
                     .build()
             )))
             .entities(List.of(entity))
@@ -51,7 +51,7 @@ class EntityBlockTest {
             .palette(MsfPalette.of(List.of("minecraft:stone")))
             .layerIndex(MsfLayerIndex.of(List.of(
                 MsfLayer.builder().layerId(1).name("Main")
-                    .addRegion(MsfRegion.builder().name("r").origin(0, 0, 0).size(1, 1, 1).build())
+                    .addRegion(MsfRegion.builder().origin(0, 0, 0).size(1, 1, 1).build())
                     .build()
             )))
             .blockEntities(List.of(be))
