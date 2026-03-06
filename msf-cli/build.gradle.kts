@@ -7,6 +7,7 @@ dependencies {
 // Produce a self-contained executable fat JAR.
 // The regular `jar` task is replaced with a fat jar that includes all runtime dependencies.
 tasks.jar {
+    dependsOn(configurations.runtimeClasspath)
     manifest {
         attributes["Main-Class"] = "dev.msf.cli.MsfCli"
     }

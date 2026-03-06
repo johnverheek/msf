@@ -37,7 +37,6 @@ public class RegionPlacerTest implements FabricGameTest {
 
         int[] blockData = {1}; // palette ID 1 = the given blockstate
         MsfRegion region = MsfRegion.builder()
-            .name("r")
             .origin(0, 0, 0)
             .size(1, 1, 1)
             .blockData(blockData)
@@ -76,7 +75,6 @@ public class RegionPlacerTest implements FabricGameTest {
         // Build file with AIR at origin (ID 0)
         MsfPalette palette = MsfPalette.of(List.of(MsfPalette.AIR));
         MsfRegion region = MsfRegion.builder()
-            .name("r")
             .origin(0, 0, 0)
             .size(1, 1, 1)
             .build(); // blockData defaults to all zeros (air)
@@ -114,7 +112,6 @@ public class RegionPlacerTest implements FabricGameTest {
         paletteList.add("minecraft:oak_stairs[facing=north,half=bottom,shape=straight,waterlogged=false]");
         MsfPalette palette = MsfPalette.of(paletteList);
         MsfRegion region = MsfRegion.builder()
-            .name("r")
             .origin(0, 0, 0)
             .size(1, 1, 1)
             .blockData(new int[]{1})

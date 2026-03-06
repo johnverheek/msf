@@ -34,7 +34,7 @@ public class RegionExtractorTest implements FabricGameTest {
         BlockBox bounds = BlockBox.create(worldPos, worldPos);
 
         List<String> palette = new ArrayList<>();
-        RegionExtractor.extract(ctx.getWorld(), bounds, "test", anchor, false, palette);
+        RegionExtractor.extract(ctx.getWorld(), bounds, anchor, false, palette);
 
         ctx.assertTrue(!palette.isEmpty(), "Palette must not be empty after extract");
         ctx.assertTrue(MsfPalette.AIR.equals(palette.get(0)),
@@ -52,7 +52,7 @@ public class RegionExtractorTest implements FabricGameTest {
 
         List<String> palette = new ArrayList<>();
         MsfRegion region = RegionExtractor.extract(
-            ctx.getWorld(), bounds, "test", anchor, false, palette
+            ctx.getWorld(), bounds, anchor, false, palette
         );
 
         ctx.assertTrue(palette.contains("minecraft:stone"), "Stone not in palette");
@@ -74,7 +74,7 @@ public class RegionExtractorTest implements FabricGameTest {
 
         List<String> palette = new ArrayList<>();
         MsfRegion region = RegionExtractor.extract(
-            ctx.getWorld(), bounds, "test", anchor, false, palette
+            ctx.getWorld(), bounds, anchor, false, palette
         );
 
         int stoneId = palette.indexOf("minecraft:stone");
@@ -98,7 +98,7 @@ public class RegionExtractorTest implements FabricGameTest {
 
         List<String> palette = new ArrayList<>();
         MsfRegion region = RegionExtractor.extract(
-            ctx.getWorld(), bounds, "test", anchor, false, palette
+            ctx.getWorld(), bounds, anchor, false, palette
         );
 
         ctx.assertEquals(2, region.originX(), "originX");
@@ -119,7 +119,7 @@ public class RegionExtractorTest implements FabricGameTest {
 
         List<String> palette = new ArrayList<>();
         MsfRegion region = RegionExtractor.extract(
-            ctx.getWorld(), bounds, "biome-test", anchor, true, palette
+            ctx.getWorld(), bounds, anchor, true, palette
         );
 
         ctx.assertTrue(region.hasBiomeData(),
@@ -138,7 +138,7 @@ public class RegionExtractorTest implements FabricGameTest {
 
         List<String> palette = new ArrayList<>();
         MsfRegion region = RegionExtractor.extract(
-            ctx.getWorld(), bounds, "r", anchor, true, palette
+            ctx.getWorld(), bounds, anchor, true, palette
         );
 
         ctx.assertTrue(region.biomeData() != null,
@@ -158,7 +158,7 @@ public class RegionExtractorTest implements FabricGameTest {
 
         List<String> palette = new ArrayList<>();
         MsfRegion region = RegionExtractor.extract(
-            ctx.getWorld(), bounds, "r", anchor, true, palette
+            ctx.getWorld(), bounds, anchor, true, palette
         );
         List<String> extractedBiomePalette = new ArrayList<>(region.biomePalette());
 

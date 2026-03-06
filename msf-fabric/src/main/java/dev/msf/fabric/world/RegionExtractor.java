@@ -51,7 +51,6 @@ public final class RegionExtractor {
      *
      * @param world        the source world
      * @param bounds       the axis-aligned bounding box of the region to extract
-     * @param regionName   the name to assign to the produced {@link MsfRegion}
      * @param anchorPos    the schematic anchor in world coordinates; the region
      *                     origin is computed relative to this point
      * @param includeBiomes when {@code true}, biome data is sampled and included
@@ -67,7 +66,6 @@ public final class RegionExtractor {
     public static MsfRegion extract(
         ServerWorld world,
         BlockBox bounds,
-        String regionName,
         BlockPos anchorPos,
         boolean includeBiomes,
         List<String> paletteOut
@@ -121,7 +119,6 @@ public final class RegionExtractor {
         int originZ = minZ - anchorPos.getZ();
 
         MsfRegion.Builder builder = MsfRegion.builder()
-            .name(regionName)
             .origin(originX, originY, originZ)
             .size(sizeX, sizeY, sizeZ)
             .blockData(blockData);

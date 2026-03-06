@@ -9,6 +9,11 @@
     "sources": "https://github.com/msf-format/msf"
   },
   "license": "MIT",
+  "entrypoints": {
+    "main": [
+      "dev.msf.fabric.MsfModInitializer"
+    ]
+  },
   "environment": "*",
   "depends": {
     "fabricloader": ">=0.16.0",

@@ -46,7 +46,7 @@ public class FullRoundTripTest implements FabricGameTest {
         // ---- Extract ----
         List<String> palette = new ArrayList<>();
         MsfRegion region = RegionExtractor.extract(
-            world, BlockBox.create(from, to), "region", extractAnchor, false, palette
+            world, BlockBox.create(from, to), extractAnchor, false, palette
         );
 
         MsfFile file = MsfFile.builder()
@@ -81,7 +81,6 @@ public class FullRoundTripTest implements FabricGameTest {
     public void fileSizeIsNonZeroAfterWrite(TestContext ctx) throws MsfPaletteException, MsfException {
         // Minimal single-air-block file
         MsfRegion region = MsfRegion.builder()
-            .name("r")
             .origin(0, 0, 0)
             .size(1, 1, 1)
             .build();
@@ -109,7 +108,7 @@ public class FullRoundTripTest implements FabricGameTest {
 
         List<String> palette = new ArrayList<>();
         MsfRegion region = RegionExtractor.extract(
-            world, BlockBox.create(worldPos, worldPos), "r", anchor, false, palette
+            world, BlockBox.create(worldPos, worldPos), anchor, false, palette
         );
 
         MsfFile file = MsfFile.builder()
