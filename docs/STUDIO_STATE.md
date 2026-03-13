@@ -1,39 +1,48 @@
 # Studio State — MSF
 
 ## Current Phase
-Implementation — Session 13 complete, Session 14 ready to start.
+Verification — Session 14 complete. Owner manual verification required before release phase.
 
 ## Version Target
 v1.0.0 (internal release — no external publishing until owner triggers publishing gate)
 
 ## Spec Status
-V1_N — closed, stable. No open issues. DRAFT marker still present — removal is a Session 14 deliverable.
+V1.0 — published (DRAFT marker removed). No open issues.
 
 ## Implementation Status
-Session 13 complete. CI/CD pipeline, version strings, CLI fat jar all delivered.
-Session 12 test count: 269+. No new tests in Session 13 (infrastructure-only session).
+Session 14 complete. All coding sessions done for v1.0.0.
 
-### Session 13 Deliverables
-- .github/workflows/ci.yml — build + test on push/PR to develop and main, Java 21, Gradle cache
-- Version strings confirmed single-source: allprojects { version = "1.0.0" } in root build.gradle.kts
-- fabric.mod.json uses ${version} placeholder, depends tightened to match libs.versions.toml
-- msf-cli fat jar: ./gradlew build produces runnable msf-cli-1.0.0.jar
+### Test Counts
+- msf-core: 211 tests
+- msf-cli: 35 tests
+- msf-fabric (standard): 0 (logic lives in msf-core; fabric module tested via gametests)
+- msf-fabric (gametests): 37 (require live Minecraft server, run via ./gradlew :msf-fabric:runGametest)
+- Total: 246 standard + 37 gametest = 283
+
+### Sessions 13–14 Deliverables
+- .github/workflows/ci.yml — CI pipeline
+- Version strings finalized (single-source 1.0.0)
+- CLI fat jar (msf-cli-1.0.0.jar)
+- README.md — full rewrite
+- CHANGELOG.md — v1.0.0 entry
+- Spec cleanup — DRAFT marker removed
+- Clean build verified — 246 tests pass, no disabled tests, deprecated API fixed
+- Implementation gate produced
 
 ## What's Next
-1. Session 14: Documentation + clean build (README, changelog, spec cleanup, build verification)
-2. Manual round-trip and conversion verification (owner, with running Minecraft)
-3. Release phase — tag + GitHub Release with artifacts, no external publishing
-
-## Watch Items for Session 14
-- runGametest is not part of ./gradlew build — note in verification log that gametests require a live server
-- msf-fabric/build.gradle.kts uses deprecated project.buildDir — fix during clean build pass
+1. **Owner: manual verification (Stories 3.2, 3.3)**
+   - Story 3.2: End-to-end round trip against Minecraft 1.21.1 with Fabric
+   - Story 3.3: Conversion path verification
+   - Commit results as verification log
+2. **Owner: GitHub branch protection** — require CI status check on develop and main
+3. **Release phase (app-release skill)** — after verification passes
 
 ## Gate Documents
 | Gate | Path | Status |
 |------|------|--------|
 | Planning | docs/gates/v1.0.0/PLANNING_GATE.md | Approved |
-| Implementation | docs/gates/v1.0.0/IMPLEMENTATION_GATE.md | Produced at end of Session 14 |
-| Release | — | After verification |
+| Implementation | docs/gates/v1.0.0/IMPLEMENTATION_GATE.md | Complete |
+| Release | — | Blocked on owner verification |
 | Publishing | — | Deferred until owner triggers |
 
 ## Branch
