@@ -156,7 +156,6 @@ public final class BlockStateBridge {
         return sb.toString();
     }
 
-    @SuppressWarnings("unchecked")
     private static <T extends Comparable<T>> String valueName(BlockState state, Property<T> prop) {
         return prop.name(state.get(prop));
     }

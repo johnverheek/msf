@@ -164,10 +164,7 @@ public class InspectCommand implements Callable<Integer> {
         // --- Checksums ---
         System.out.println();
         System.out.println("--- Checksums ---");
-        boolean headerChecksumFailed = warnings.stream()
-                .anyMatch(w -> w.code() == MsfWarning.Code.FILE_CHECKSUM_FAILURE
-                        && w.message().contains("Header"));
-        // Header checksum failure throws before we get here, so if we reach this point it passed.
+        // Header checksum failure always throws MsfChecksumException before we get here.
         line("Header checksum", "PASS");
         boolean fileChecksumFailed = warnings.stream()
                 .anyMatch(w -> w.code() == MsfWarning.Code.FILE_CHECKSUM_FAILURE);
