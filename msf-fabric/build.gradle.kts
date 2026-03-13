@@ -38,7 +38,7 @@ loom {
             vmArg("-ea")
             property("fabric-api.gametest")
             property("fabric-api.gametest.report-file",
-                "${project.buildDir}/test-results/gametest/TEST-gametest.xml")
+                project.layout.buildDirectory.file("test-results/gametest/TEST-gametest.xml").get().asFile.absolutePath)
         }
     }
 }
@@ -55,7 +55,7 @@ publishing {
             from(components["java"])
             groupId = "dev.msf"
             artifactId = "msf-fabric"
-            version = "1.0.0+1.21.1"
+            version = "${project.version}+1.21.1"
             pom {
                 name.set("MSF Fabric")
                 description.set("Fabric bridge for the MSF (Minecraft Structured Format) schematic format")

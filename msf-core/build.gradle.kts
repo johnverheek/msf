@@ -12,7 +12,7 @@ publishing {
         named<MavenPublication>("mavenJava") {
             groupId = "dev.msf"
             artifactId = "msf-core"
-            version = "1.0.0"
+            version = "${project.version}"
             pom {
                 name.set("MSF Core")
                 description.set("Core library for the MSF (Minecraft Structured Format) schematic format")
