@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "id": "msf-fabric",
-  "version": "1.0.0+1.21.1",
+  "version": "${version}",
   "name": "MSF Fabric",
   "description": "Fabric bridge for the MSF schematic format. Resolves MSF blockstate, entity, and biome strings against Minecraft registries.",
   "authors": [],
@@ -16,8 +16,8 @@
   },
   "environment": "*",
   "depends": {
-    "fabricloader": ">=0.16.0",
-    "fabric-api": "*",
-    "minecraft": "~1.21"
+    "fabricloader": ">=0.16.5",
+    "fabric-api": ">=0.102.0",
+    "minecraft": "~1.21.1"
   }
 }

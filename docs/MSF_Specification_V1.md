@@ -1,6 +1,6 @@
 # MSF (Minecraft Structured Format) Specification
 
-## Version 1.0 — DRAFT
+## Version 1.0
 
 -----
 
