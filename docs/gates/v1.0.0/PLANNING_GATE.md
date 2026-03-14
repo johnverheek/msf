@@ -1,182 +1,275 @@
-Planning Gate — v1.0.0
-Track: Major (initial release) Branch: release/v1.0.0
-What This Release Is
-The first internal release of MSF (Minecraft Structured Format) — a binary schematic file format for Minecraft with a Java reference implementation. v1.0.0 exercises the full release process: CI/CD pipeline, version finalization, build verification, spec publication, and tagging. Artifacts are built and verified but NOT published externally. No Maven repository, no mod distribution platform, no community announcement. External publishing is a separate future gate triggered by the owner.
-Semver Rationale
-Initial release — v1.0.0 signals a stable, production-ready format and reference implementation. The version is real and permanent even though distribution is deferred.
-Breaking Change
-Breaking: No — there are no prior releases to break against.
-Inventory of What Exists
-Specification
-•	V1.0 spec through review round V1_N — all critical issues resolved, spec stable
-•	Covers: header, global palette, metadata, layer index, region data (bit packing, compression), entity block, block entity block, placement metadata, file checksum, versioning contract
-•	Full appendices (A–F): implementer guarantee, block type summary, canonical ordering, xxHash3, unsigned integer handling, deprecation policy
-msf-core (Sessions 1–10)
-•	MsfHeader: 48-byte header read/write, magic validation, checksum verification
-•	MsfException hierarchy: MsfParseException, MsfVersionException, MsfChecksumException, MsfPaletteException, MsfCompressionException
-•	Global palette: read/write, AIR invariant, deduplication enforcement
-•	Metadata block: all fields including placement metadata, thumbnail, functional volume
-•	Layer index: read/write, dependency validation, flag handling
-•	Region data: bit packing (YZX ordering), compression (none/zstd/lz4/brotli), biome data
-•	Entity and block entity blocks: typed field extraction, UUID stripping
-•	File checksum: xxHash3-64 computation and verification
-•	Warning mechanism: MsfWarning with codes, consumer-based delivery
-•	In-house NBT reader/writer
-•	NBT ↔ MSF conversion logic
-•	Litematica ↔ MSF conversion logic (with intermediate routing)
-msf-fabric (Session 12)
-•	BlockStateBridge, EntityBridge, BiomeBridge — registry resolution
-•	RegionExtractor — world → MSF extraction
-•	RegionPlacer — MSF → world placement with facing rotation
-•	/msf extract command — region selection, layer assignment, file output
-•	/msf place command — all layers, player facing, file path resolution
-•	File paths resolve relative to server run directory (msf-schematics/)
-msf-cli (Sessions 9–11)
-•	inspect subcommand — header and block summary
-•	validate subcommand — structural and checksum verification
-•	.nbt ↔ .msf conversion (vanilla structure format)
-•	.litematic ↔ .msf conversion (Litematica format)
-•	Cross-format routing (e.g., .litematic → .msf → .nbt via intermediate)
-Test Suite
-•	269+ tests across all three modules
-•	Coverage: round-trip, corruption, version rejection, boundary conditions, forward compatibility
-Scope
+# Planning Gate — v1.0.0
+Track: Minor
+Branch: feature/v1.0.0-entity-bridge
+
+## What This Release Is
+v1.0.0 is the first public release of MSF. It completes the implementation gap between the V1_N specification and what the reference implementation actually delivers: entity and block entity support in msf-fabric. Without this, builders who extract structures containing armor stands, item frames, or containers lose that content silently — unacceptable for a v1.0.0 claim given that Sections 8 and 9 of the spec are fully written and stable. This release also ships the publishing infrastructure that makes the project discoverable (Maven Central for msf-core, Modrinth and CurseForge for msf-fabric), canonical test vectors for third-party implementors, and a README benchmark table that demonstrates the format's concrete file-size advantage.
+
+## Semver Rationale
+Minor bump because all changes are additive — new capability in msf-fabric with no changes to existing APIs, binary format, or existing behavior.
+
+## Breaking Change
+Breaking: No
+
+## Scope
 In:
-•	CI/CD pipeline (GitHub Actions: build + test on PR and push to develop/main)
-•	Version strings finalized in all build files and mod metadata
-•	CLI distribution packaging (fat jar via shadowJar or equivalent)
-•	README with project overview, module descriptions, build instructions, usage examples
-•	CHANGELOG.md for v1.0.0
-•	Spec document cleanup (remove DRAFT marker, strip working notes)
-•	fabric.mod.json verification (version, dependencies, metadata)
-•	Clean build verification (all tests green)
-•	End-to-end round-trip validation (extract → save → inspect → validate → place)
-•	Conversion path verification (.nbt and .litematic round trips)
-•	Git tag v1.0.0 on main
-•	GitHub Release with artifacts attached (spec, CLI fat jar, mod jar)
+- Entity extraction and placement in msf-fabric (RegionExtractor, RegionPlacer, EntityBridge, BlockEntityBridge)
+- Feature flag bits 0 and 1 wired end-to-end through extract and place commands
+- Canonical test vectors in test/resources (one per compression type + one with entities and block entities)
+- Maven Central publication for msf-core (dev.msf:msf-core:1.0.0)
+- Modrinth and CurseForge publication for msf-fabric
+- GitHub Release with msf-cli fat-jar attached
+- README benchmark table (file size vs .litematic and .nbt)
+- README install section with /msf extract usage
+
 Out:
-•	External publishing to any repository or platform (Maven Central, GitHub Packages, Modrinth, CurseForge) — deferred until owner triggers publishing gate
-•	Community announcements and mod page content — deferred until publishing
-•	NeoForge bridge — deferred to a future version
-•	GUI tooling or editor integration
-•	Spec website or hosted documentation beyond the repo
-•	Performance benchmarking suite
-•	Javadoc polish — can be done incrementally, not a release blocker
-Stories
-Epic 1 — Release Infrastructure
-Story 1.1: CI/CD Pipeline
-As the project owner, I want automated build and test on every push and PR, so that regressions are caught before they reach the develop branch.
-Priority: P0 Module: repo-wide (GitHub Actions) Breaking: No
+- /msf list and /msf preview in-game commands (v1.1.0)
+- Layers support in /msf extract — multi-layer extraction (v1.1.0)
+- .schem (MCEdit) and Sponge format conversion in msf-cli (v1.1.0)
+- Rotation and mirror flags in /msf place (v1.1.0)
+- NeoForge and Quilt multi-loader support (v1.2.0+)
+- Mod Menu integration (v1.1.0)
+- PlantUML architecture diagram (v1.1.0 docs pass)
+
+## Stories
+
+### Epic 1 — Entity & BlockEntity Fabric Bridge (msf-fabric)
+
+---
+
+As a builder,
+I want the /msf extract command to capture entities within the extraction bounds,
+so that armor stands, item frames, and other entities are preserved in the schematic.
+
+Priority: P0
+Module: msf-fabric
+Spec reference: Section 8
+Breaking: No
+
 Acceptance Criteria:
-•	[ ] GitHub Actions workflow runs ./gradlew build on push to develop and main
-•	[ ] GitHub Actions workflow runs ./gradlew build on PR to develop and main
-•	[ ] Workflow targets Java 21
-•	[ ] Build failure blocks PR merge
-•	[ ] Workflow caches Gradle dependencies
-Story 1.2: Version Strings
-As the release engineer, I want all version strings set to 1.0.0 from a single source, so that build artifacts carry the correct version with no duplication.
-Priority: P0 Module: all modules (build.gradle.kts, fabric.mod.json, libs.versions.toml) Breaking: No
+- [ ] /msf extract captures all entities whose block position falls within the selection bounds
+- [ ] Captured entities have UUIDs stripped from NBT payload before storage per Section 8.2
+- [ ] MsfFile produced has feature flag bit 0 set and entity block offset non-zero
+- [ ] Entity type, position (f64 x/y/z), yaw, and pitch are stored in typed fields, not in NBT
+- [ ] /msf extract on a region containing no entities produces a file with feature flag bit 0 clear and entity block offset 0
+
+---
+
+As a builder,
+I want the /msf place command to place entities from the schematic into the world,
+so that entities are restored at the correct position with new UUIDs assigned.
+
+Priority: P0
+Module: msf-fabric
+Spec reference: Section 8
+Breaking: No
+
 Acceptance Criteria:
-•	[ ] msf-core artifact version is 1.0.0
-•	[ ] msf-fabric artifact version is 1.0.0+1.21.1
-•	[ ] msf-cli artifact version is 1.0.0
-•	[ ] fabric.mod.json version field matches 1.0.0
-•	[ ] fabric.mod.json depends block declares correct Fabric API and loader versions
-•	[ ] Version is sourced from a single location — no duplicated version literals
-Story 1.3: CLI Fat Jar
-As a user who does not build from source, I want a single runnable jar for msf-cli, so that I can inspect, validate, and convert MSF files directly.
-Priority: P0 Module: msf-cli (build configuration) Breaking: No
+- [ ] /msf place spawns all entities from the entity block at correct world positions (anchor-relative)
+- [ ] Each placed entity receives a freshly generated UUID — the UUID was stripped on write and MUST NOT be reused
+- [ ] /msf place on a file with feature flag bit 0 clear does not attempt entity spawning and does not throw
+- [ ] Entities are spawned after block regions are placed in all layers
+
+---
+
+As a builder,
+I want the /msf extract command to capture block entities within the extraction bounds,
+so that chest contents, sign text, and other block entity data are preserved.
+
+Priority: P0
+Module: msf-fabric
+Spec reference: Section 9
+Breaking: No
+
 Acceptance Criteria:
-•	[ ] ./gradlew :msf-cli:shadowJar (or equivalent) produces a fat jar with all dependencies
-•	[ ] Fat jar is runnable via java -jar msf-cli-1.0.0.jar
-•	[ ] --help prints usage for all subcommands
-•	[ ] Fat jar does not include msf-fabric or Minecraft dependencies
-Epic 2 — Documentation
-Story 2.1: README
-As a developer discovering the project, I want a README that explains what MSF is, how the repo is structured, and how to build it, so that I can evaluate and build the project.
-Priority: P0 Module: repo root Breaking: No
+- [ ] /msf extract captures all block entities whose position falls within the selection bounds
+- [ ] Block entity position is stored as i32 offsets relative to the schematic anchor per Section 9.1
+- [ ] UUIDs are stripped from block entity NBT payloads per Section 9.2 before storage
+- [ ] MsfFile produced has feature flag bit 1 set and block entity block offset non-zero when block entities are present
+- [ ] /msf extract on a region with no block entities produces a file with feature flag bit 1 clear and block entity block offset 0
+
+---
+
+As a builder,
+I want the /msf place command to restore block entities from the schematic,
+so that chests, signs, and other tile entities are fully functional after placement.
+
+Priority: P0
+Module: msf-fabric
+Spec reference: Section 9
+Breaking: No
+
 Acceptance Criteria:
-•	[ ] README contains: project description, module overview (core/fabric/cli), build instructions, CLI usage examples, link to spec
-•	[ ] Build instructions work for a clean checkout with Java 21 and Gradle
-•	[ ] No broken links
-Story 2.2: Spec Artifact Preparation
-As the release engineer, I want the specification document cleaned up for release, so that the published spec is authoritative and free of working notes.
-Priority: P0 Module: docs Breaking: No
+- [ ] /msf place restores all block entities at the correct anchor-relative positions in the world
+- [ ] /msf place on a file with feature flag bit 1 clear does not attempt block entity restoration and does not throw
+- [ ] Block entity NBT data is applied after the corresponding block has been placed
+
+---
+
+As a developer,
+I want EntityBridge and BlockEntityBridge to implement bidirectional conversion between Minecraft types and MSF model types,
+so that all typed fields round-trip correctly and UUID stripping is enforced at the bridge layer.
+
+Priority: P1
+Module: msf-fabric (bridge/ package)
+Spec reference: Sections 8.2, 9.2
+Breaking: No
+
 Acceptance Criteria:
-•	[ ] Spec header reads "Version 1.0" (not "DRAFT")
-•	[ ] All review round markers and working notes are removed
-•	[ ] Spec is attached to the GitHub Release as a downloadable artifact
-Story 2.3: Changelog
-As the project owner reviewing the release, I want a CHANGELOG.md documenting what v1.0.0 includes, so that the scope of the initial release is clearly recorded.
-Priority: P0 Module: repo root Breaking: No
+- [ ] EntityBridge.toMsf(Entity) produces an MsfEntity with UUID absent from the NBT payload
+- [ ] EntityBridge.toMinecraft(MsfEntity, world, offset) spawns an entity with a new UUID and correct position
+- [ ] BlockEntityBridge.toMsf(BlockEntity, anchorOffset) produces an MsfBlockEntity with correct anchor-relative position and UUID absent
+- [ ] BlockEntityBridge.toMinecraft(MsfBlockEntity, world, placementOffset) applies block entity NBT at the correct world position
+
+---
+
+As a developer,
+I want round-trip tests for entities and block entities in msf-fabric,
+so that extract → save → place is verified to preserve entity state correctly.
+
+Priority: P1
+Module: msf-fabric (tests)
+Spec reference: Sections 8, 9
+Breaking: No
+
 Acceptance Criteria:
-•	[ ] CHANGELOG.md exists with a v1.0.0 entry
-•	[ ] Entry summarizes: spec version, module capabilities, supported formats, Minecraft version target
-•	[ ] Follows Keep a Changelog format
-Epic 3 — Final Verification
-Story 3.1: Clean Build Verification
-As the release engineer, I want a clean-checkout build to pass all tests with zero failures, so that release artifacts are verified correct.
-Priority: P0 Module: all Breaking: No
+- [ ] Test: extract region containing one armor stand, save to .msf, place from .msf; verify armor stand spawned at correct position
+- [ ] Test: extract region containing one chest with at least one item stack, save to .msf, place from .msf; verify chest contents match original
+- [ ] Test: extract region with no entities; verify produced file has feature flag bit 0 clear
+- [ ] Test: place a file with no entity block; verify no exception is thrown
+
+---
+
+### Epic 2 — Test Vectors (test/resources in msf-core or msf-fabric)
+
+---
+
+As a spec implementor,
+I want canonical .msf test files covering all major structural variants,
+so that I can validate my implementation against the reference format without writing my own test data.
+
+Priority: P1
+Module: test/resources
+Spec reference: Sections 7.2, 8, 9
+Breaking: No
+
 Acceptance Criteria:
-•	[ ] ./gradlew clean build passes all 269+ tests
-•	[ ] No test is @Disabled without an explanatory comment
-•	[ ] No compiler warnings related to deprecation or unchecked casts in production code
-Story 3.2: End-to-End Round-Trip Validation
-As the project owner, I want documented evidence of a full round trip (build → extract → save → inspect → validate → place), so that all three modules are verified to interoperate.
-Priority: P0 Module: all (integration) Breaking: No
+- [ ] minimal.msf: single layer, single region, no entities, no block entities, compression type 0x00 (none)
+- [ ] zstd.msf: same structure as minimal.msf, compression type 0x01 (zstd)
+- [ ] lz4.msf: same structure as minimal.msf, compression type 0x02 (lz4)
+- [ ] brotli.msf: same structure as minimal.msf, compression type 0x03 (brotli)
+- [ ] entities.msf: single layer, single region, feature flag bits 0 and 1 set, one entity, one block entity
+- [ ] A test class validates each golden file by parsing it via MsfReader and asserting no exception is thrown and field values match documented expectations
+
+---
+
+### Epic 3 — Publishing Infrastructure (code-release)
+
+---
+
+As a developer,
+I want msf-core published to Maven Central on release tag push,
+so that library consumers can declare a Gradle or Maven dependency on it.
+
+Priority: P0
+Module: CI / build.gradle.kts
+Spec reference: —
+Breaking: No
+
 Acceptance Criteria:
-•	[ ] Round trip completed against Minecraft 1.21.1 with Fabric
-•	[ ] CLI inspect output matches expected header and block summary
-•	[ ] CLI validate reports no errors
-•	[ ] Placed structure matches original (visual comparison + block count match)
-•	[ ] Results documented in a verification log
-Story 3.3: Conversion Path Verification
-As a user with existing schematics, I want .nbt ↔ .msf and .litematic ↔ .msf conversions to produce valid files, so that migration to MSF works correctly.
-Priority: P0 Module: msf-cli Breaking: No
+- [ ] GitHub Actions workflow triggers on push of tag matching v[0-9]*.[0-9]*.[0-9]*
+- [ ] msf-core artifact published with coordinates dev.msf:msf-core:1.0.0
+- [ ] Javadoc JAR and sources JAR included in the Maven Central publication
+- [ ] Workflow fails and does not publish if any module test suite fails
+
+---
+
+As a player,
+I want msf-fabric published to Modrinth and CurseForge on release tag push,
+so that I can install it through a mod launcher.
+
+Priority: P0
+Module: CI
+Spec reference: —
+Breaking: No
+
 Acceptance Criteria:
-•	[ ] .nbt → .msf produces a file that passes validate
-•	[ ] .litematic → .msf produces a file that passes validate
-•	[ ] .msf → .nbt round trip preserves block data
-•	[ ] .msf → .litematic round trip preserves block data
-•	[ ] Pending tick data from Litematica is silently dropped
-Session Plan
-Session 13: Release Infrastructure
-•	Module: repo-wide
-•	Stories: 1.1 (CI/CD), 1.2 (version strings), 1.3 (CLI fat jar)
-•	Deliverables: GitHub Actions workflow, version finalization, shadowJar configuration
-•	Gated on: nothing — can start immediately
-Session 14: Documentation + Clean Build
-•	Module: repo-wide
-•	Stories: 2.1 (README), 2.2 (spec cleanup), 2.3 (changelog), 3.1 (clean build)
-•	Deliverables: README.md, CHANGELOG.md, cleaned spec, build verification log
-•	Gated on: Session 13 (version strings must be final)
-Owner verification (manual, not a coding session):
-•	Stories: 3.2 (round-trip), 3.3 (conversion paths)
-•	Requires running Minecraft 1.21.1 with Fabric
-•	Results committed to repo as verification log
-Release phase (app-release skill):
-•	Tag v1.0.0, create GitHub Release, attach artifacts (spec, CLI fat jar, mod jar)
-•	No external publishing — artifacts live on the GitHub Release only
-Format Amendment Brief
-None — spec is at V1_N, closed, stable. The only spec change is removing the "DRAFT" status marker, which is editorial, not normative.
-SME Skills Required
-Skill	Status	Phase Needed
-app-planning	Installed	Planning (now)
-code-mc-implementation	Installed	Sessions 13–14
-code-release	Installed	CI/CD (Session 13)
-app-release	Installed	Release phase
-app-documentation	Installed	Session 14
-app-format-spec	Installed	Spec cleanup only
-All required skills installed.
-Gate Documents This Release Produces
-Gate	Producer	Status
-PLANNING_GATE.md	app-planning	This document
-IMPLEMENTATION_GATE.md	code-mc-implementation	After Session 14
-Release gate	app-release	After verification
-Deferred: Publishing Gate
-External publishing is explicitly deferred. When the owner is ready, a separate publishing gate will be produced covering:
-•	Maven repository publishing (GitHub Packages or Maven Central)
-•	Modrinth and CurseForge mod pages
-•	Community announcements
-•	Any additional documentation (Javadoc hosting, spec website)
-This gate will be triggered by the owner, not by the release process.
+- [ ] GitHub Actions workflow publishes msf-fabric to Modrinth on tag push
+- [ ] GitHub Actions workflow publishes msf-fabric to CurseForge on tag push
+- [ ] GitHub Release is created with msf-cli fat-jar attached as a release asset
+- [ ] Modrinth and CurseForge listings include the changelog text produced for this release
+
+---
+
+As a developer,
+I want README badges for Maven Central, Modrinth, and CurseForge,
+so that discoverability and version status are immediately visible from the repository.
+
+Priority: P1
+Module: README.md
+Spec reference: —
+Breaking: No
+
+Acceptance Criteria:
+- [ ] README displays a Maven Central version badge linked to the artifact page
+- [ ] README displays a Modrinth downloads badge
+- [ ] README displays a CurseForge downloads badge
+
+---
+
+### Epic 4 — Documentation (app-documentation)
+
+---
+
+As a potential adopter,
+I want a file-size benchmark table in the README comparing .msf against .litematic and .nbt,
+so that I can understand the concrete file-size advantage before committing to the format.
+
+Priority: P1
+Module: README.md / docs/
+Spec reference: —
+Breaking: No
+
+Acceptance Criteria:
+- [ ] README contains a table with at least three test cases spanning small, medium, and large structures
+- [ ] Table columns: structure, .nbt size, .litematic size, .msf (zstd) size, .msf (lz4) size
+- [ ] A one-sentence methodology note identifies the tool versions used to produce the measurements
+
+---
+
+As a new user,
+I want install instructions in the README with usage examples for /msf extract and /msf place,
+so that I can get started without reading the full spec.
+
+Priority: P2
+Module: README.md
+Spec reference: —
+Breaking: No
+
+Acceptance Criteria:
+- [ ] README contains a Fabric install path (Modrinth link or .jar download)
+- [ ] README shows the /msf extract command syntax with an example selection
+- [ ] README shows the /msf place command syntax with an example file path
+
+---
+
+## Session Plan
+
+Session 13 (code-mc-implementation): Epic 1 — EntityBridge, BlockEntityBridge, RegionExtractor and RegionPlacer extensions for entities and block entities, feature flag bit wiring in /msf extract and /msf place, round-trip tests. Epic 2 — canonical test vectors generated and validated in the same session.
+
+code-release task: Epic 3 — GitHub Actions workflow for Maven Central, Modrinth, CurseForge, and GitHub Release. README badges. This is a separate task for the code-release skill after Session 13 produces a passing build.
+
+app-documentation task: Epic 4 — README benchmark table and install documentation. This runs in parallel with or after code-release.
+
+## Format Amendment Brief
+Not required. Sections 8 and 9 of spec revision V1_N are fully written, complete, and stable. No normative changes are needed for this release.
+
+## SME Skills Required
+All required skills installed:
+- code-mc-implementation (Session 13)
+- code-release (publishing infrastructure)
+- app-documentation (README and docs)
+
+## Gate Documents This Release Produces
+- IMPLEMENTATION_GATE.md — produced by code-mc-implementation after Session 13
+- RELEASE_GATE.md — produced by app-release after publishing
