@@ -4,7 +4,7 @@
   "version": "${version}",
   "name": "MSF Fabric",
   "description": "Fabric bridge for the MSF schematic format. Resolves MSF blockstate, entity, and biome strings against Minecraft registries.",
-  "authors": [],
+  "authors": ["John Verheek"],
   "contact": {
     "sources": "https://github.com/msf-format/msf"
   },

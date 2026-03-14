@@ -1,142 +1,216 @@
 # MSF — Minecraft Structured Format
 
-MSF is a binary file format for storing Minecraft structure schematics. It is tool-agnostic: any tool can implement it. No single mod or editor owns the format. File extension: `.msf`.
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![Java 21](https://img.shields.io/badge/Java-21-orange.svg)](https://openjdk.org/projects/jdk/21/)
+[![Minecraft 1.21.1](https://img.shields.io/badge/Minecraft-1.21.1-green.svg)](https://minecraft.net)
 
-The format is designed for stability and extensibility. The core header is permanently frozen at 48 bytes. All blocks beyond the header are skippable via length prefixes. Minor versions are always backwards compatible — any V1 reader can read any V1 file.
+A tool-agnostic binary schematic format for Minecraft. No single tool or mod owns the format — any tool can implement it.
 
-**Specification:** [docs/MSF_Specification_V1.md](docs/MSF_Specification_V1.md)
+MSF solves schematic fragmentation. Vanilla `.nbt` structures are size-limited. Litematica `.litematic` is tied to one client mod. Sponge `.schem` is aging. MSF is modern, compressed, layered, and permanently forward-compatible within V1 — code you write today will never be broken by a future V1 spec update.
 
----
+## Why MSF?
 
-## Modules
+| Feature | MSF | Litematica | Sponge Schematic |
+|---|---|---|---|
+| Tool ownership | None — open spec | Litematica mod | Sponge / WorldEdit |
+| Forward compatibility | Guaranteed within V1 | No promise | Limited |
+| Compression | ZSTD, LZ4, Brotli, none | GZIP (NBT) | GZIP (NBT) |
+| Semantic layers | Yes — construction phases | No | No |
+| Bit-packed palettes | Yes — compact storage | No | No |
+| Entity support | Yes — with UUID stripping | Yes | Yes |
+| Pure Java library | Yes — zero MC dependencies | No | No |
 
-### msf-core
+## Project Structure
 
-Pure Java 21 library. Zero Fabric or Minecraft dependencies.
+- **msf-core** — Pure Java 21 library. Zero Minecraft dependencies. All MSF parsing, encoding, checksums, and compression. Publishable to Maven Central.
+- **msf-fabric** — Fabric 1.21.1 bridge. Resolves MSF strings against Minecraft registries. In-game `/msf` commands.
+- **msf-cli** — Standalone CLI tool. Inspect, validate, and convert between `.nbt`, `.litematic`, and `.msf` files.
 
-- Reads and writes `.msf` files
-- Encodes and decodes bit-packed, compressed region data (zstd, lz4, brotli, none)
-- Validates structure, checksums (xxHash3-64), palettes, and feature flags
-- In-house NBT reader/writer
-- Converts `.nbt` (vanilla structure format) and `.litematic` (Litematica) to and from `.msf`
-- Warning mechanism via `Consumer<MsfWarning>` — no stdout/stderr output by default
+## Quick Start
 
-### msf-fabric
+### Use the CLI
 
-Fabric 1.21.1 bridge. Depends on msf-core.
-
-- Resolves MSF blockstate strings against Minecraft registries
-- Extracts regions from the live world and writes `.msf` files
-- Places regions into the live world with player-facing rotation support
-- In-game commands:
-  - `/msf extract <x1> <y1> <z1> <x2> <y2> <z2> <filename>` — extract a region to a `.msf` file
-  - `/msf place <filename>` — place a schematic at the player's position
-
-Schematics are read from and written to the `msf-schematics/` directory inside the server run directory.
-
-### msf-cli
-
-Standalone command-line tool. Depends on msf-core only. No Minecraft installation required.
-
-- `inspect` — print header summary, block inventory, and layer structure
-- `validate` — verify structure, checksums, and palette integrity; exits 0 if valid, 1 if invalid
-- `convert` — convert between `.msf`, `.nbt`, and `.litematic`
-
----
-
-## Building
-
-Requirements: **Java 21**. Internet access is required on first build to download Gradle and dependencies.
-
+Convert a Litematica schematic to MSF:
 ```bash
-# Build all modules
-./gradlew build
-
-# Run msf-core unit tests only
-./gradlew :msf-core:test
-
-# Run msf-cli unit tests
-./gradlew :msf-cli:test
-
-# Build the CLI fat jar
-./gradlew :msf-cli:shadowJar
-# Output: msf-cli/build/libs/msf-cli-1.0.0.jar
+java -jar msf-cli.jar convert my_build.litematic my_build.msf
 ```
 
-**Fabric gametests** require a live Minecraft server and are run separately from the standard build:
-
+Inspect an MSF file:
 ```bash
-./gradlew :msf-fabric:runGametest
+java -jar msf-cli.jar inspect my_build.msf
 ```
 
----
+Validate an MSF file:
+```bash
+java -jar msf-cli.jar validate my_build.msf
+```
+
+### Use the Fabric mod
+
+Extract a region in-game:
+```
+/msf extract 0 64 0 15 80 15 my_build
+```
+
+Place a schematic with rotation and mirror:
+```
+/msf place my_build 100 64 200 rotation 90 mirror x
+```
+
+List available schematics:
+```
+/msf list
+```
+
+Inspect a schematic in chat:
+```
+/msf info my_build
+```
+
+## Installation
+
+### msf-core (Java library)
+
+**Gradle (Kotlin DSL):**
+```kotlin
+dependencies {
+    implementation("dev.msf:msf-core:1.1.0")
+}
+```
+
+**Maven:**
+```xml
+<dependency>
+    <groupId>dev.msf</groupId>
+    <artifactId>msf-core</artifactId>
+    <version>1.1.0</version>
+</dependency>
+```
+
+### msf-fabric (Minecraft mod)
+
+Download from [Modrinth](https://modrinth.com/mod/msf) or [CurseForge](https://curseforge.com/minecraft/mc-mods/msf). Requires Fabric Loader 0.16.5+ and Fabric API for Minecraft 1.21.1.
+
+### msf-cli (command-line tool)
+
+Download `msf-cli.jar` from [GitHub Releases](https://github.com/johnverheek/msf/releases). Requires Java 21.
 
 ## CLI Usage
 
-The CLI fat jar is self-contained and requires only Java 21.
+### Convert
+
+Convert between `.nbt`, `.litematic`, and `.msf` with control over compression and metadata:
 
 ```bash
-java -jar msf-cli-1.0.0.jar --help
+# Convert with specific compressor and level
+java -jar msf-cli.jar convert input.litematic output.msf --compressor zstd --compression-level 6
+
+# Convert without entities
+java -jar msf-cli.jar convert input.nbt output.msf --entities false
+
+# Override metadata during conversion
+java -jar msf-cli.jar convert input.litematic output.msf --name "My Build" --author "Builder"
+
+# Re-encode an existing MSF file with different compression
+java -jar msf-cli.jar convert input.msf output.msf --compressor lz4
 ```
 
-### inspect
+Supported conversions: `.nbt` ↔ `.msf`, `.litematic` ↔ `.msf`, `.litematic` ↔ `.nbt`, `.msf` → `.msf`.
 
-Print a summary of an MSF file's header and block inventory.
+### Inspect
+
+Print a detailed summary of an MSF file. Includes palette statistics (top 10 blocks by frequency), layer breakdown, entity counts, and checksum status.
 
 ```bash
-java -jar msf-cli-1.0.0.jar inspect my_structure.msf
+# Human-readable output
+java -jar msf-cli.jar inspect my_build.msf
+
+# JSON output for CI pipelines
+java -jar msf-cli.jar inspect --format json my_build.msf
+
+# Show parser warnings on stderr
+java -jar msf-cli.jar inspect --warnings my_build.msf
 ```
 
-### validate
+### Validate
 
-Verify structural integrity, checksums, and palette correctness. Exits 0 if valid, 1 on errors, 2 if the file cannot be read.
+Run structural validation checks against the MSF specification:
 
 ```bash
-java -jar msf-cli-1.0.0.jar validate my_structure.msf
+java -jar msf-cli.jar validate my_build.msf
+
+# Show warning details
+java -jar msf-cli.jar validate --warnings my_build.msf
 ```
 
-### convert
+## Fabric Commands
 
-Convert between `.msf`, `.nbt` (vanilla structure format), and `.litematic` (Litematica). The output format is inferred from the output file extension.
+| Command | Description |
+|---|---|
+| `/msf extract <x1> <y1> <z1> <x2> <y2> <z2> <name>` | Extract a region to an MSF file |
+| `/msf extract ... entities 1 name "My Build"` | Extract with entities and custom name |
+| `/msf place <name>` | Place at player position |
+| `/msf place <name> <x> <y> <z>` | Place at explicit coordinates |
+| `/msf place <name> rotation 90 mirror x layer foundation` | Place with rotation, mirror, and layer filter |
+| `/msf list` | List available schematics (paginated) |
+| `/msf info <name>` | Inspect a schematic in chat |
 
-```bash
-# Vanilla .nbt → MSF
-java -jar msf-cli-1.0.0.jar convert structure.nbt output.msf
+Schematics are stored in the `msf-schematics/` directory relative to the server working directory.
 
-# MSF → vanilla .nbt
-java -jar msf-cli-1.0.0.jar convert structure.msf output.nbt
+## Key Features
 
-# Litematica → MSF
-java -jar msf-cli-1.0.0.jar convert blueprint.litematic output.msf
+### Semantic Layers
 
-# MSF → Litematica
-java -jar msf-cli-1.0.0.jar convert structure.msf output.litematic
+MSF schematics support named construction layers (foundation, frame, wiring, decoration, etc.) with dependency ordering. Build tools can display, toggle, and place layers independently.
 
-# Cross-format (e.g. Litematica → .nbt via MSF intermediate)
-java -jar msf-cli-1.0.0.jar convert blueprint.litematic output.nbt
+### Entity and Block Entity Support
+
+Entities (armor stands, item frames, etc.) and block entities (chests, signs, etc.) are stored with typed fields. UUIDs are automatically stripped on save and regenerated on paste — no UUID collisions when pasting the same schematic multiple times.
+
+### Forward Compatibility
+
+The MSF V1 header is permanently frozen at 48 bytes. All blocks beyond the header are discoverable and skippable via length prefixes. A V1.0 reader can safely read any future V1.x file — it reads what it understands and skips what it doesn't.
+
+### Version Disambiguation
+
+All output surfaces (CLI and Fabric) clearly distinguish the MSF format version (from the file header, e.g., "Format: V1.0") from the implementation version (e.g., "msf-cli: 1.1.0"). These are independent version tracks.
+
+## File Format
+
+The MSF binary format is defined by a normative specification: [`docs/MSF_Specification_V1.md`](docs/MSF_Specification_V1.md).
+
+```
+Header layout (48 bytes, permanently frozen):
+
+Offset  Size  Field
+------  ----  -----
+0       4     Magic bytes (MSF!)
+4       2     Major version
+6       2     Minor version
+8       4     Feature flags
+12      4     MC data version
+16      4     Metadata block offset
+20      4     Global palette offset
+24      4     Layer index offset
+28      4     Entity block offset
+32      4     Block entity block offset
+36      4     File size
+40      8     Header checksum (xxHash3-64)
 ```
 
-> Pending tick data from Litematica schematics is silently dropped. Structures are saved in rested state, which is correct behavior for placement.
+## Documentation
 
----
+| Audience | Document |
+|---|---|
+| Spec implementors | [MSF Specification V1](docs/MSF_Specification_V1.md) |
+| Contributors | [Architecture](docs/ARCHITECTURE.md) · [Coding Standards](docs/CODING_STANDARDS.md) · [Contributing](CONTRIBUTING.md) |
+| Module details | [msf-core](docs/modules/) · [msf-fabric](docs/modules/) · [msf-cli](docs/modules/) |
+| Changelog | [CHANGELOG.md](CHANGELOG.md) |
 
-## Repository Layout
+## Contributing
 
-```
-docs/
-  MSF_Specification_V1.md   — normative specification (source of truth)
-  ARCHITECTURE.md           — module boundaries and package structure
-  CODING_STANDARDS.md       — code conventions
-msf-core/                   — pure Java library (parsing, encoding, conversion)
-msf-fabric/                 — Fabric 1.21.1 bridge (world I/O, commands)
-msf-cli/                    — standalone CLI tool
-build.gradle.kts            — shared build configuration
-settings.gradle.kts         — module declarations
-gradle/libs.versions.toml   — version catalog
-```
-
----
+See [CONTRIBUTING.md](CONTRIBUTING.md) for development setup, test running, and commit conventions.
 
 ## License
 
-MIT
+[MIT](LICENSE)

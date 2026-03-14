@@ -1,87 +1,66 @@
 # Changelog
 
-All notable changes to this project will be documented in this file.
+All notable changes to this project are documented in this file.
 
-The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
-This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
+and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
----
+## [1.1.0] — 2026-03-14
+
+### Added
+
+#### msf-core
+- `OVERLAPPING_REGIONS` warning code per spec V1_O §6.4
+- Compression level support through the writer API: `RegionCompressor.compress(data, type, level)`, with level-aware `toBytes` overloads on `MsfRegion`, `MsfLayer`, `MsfLayerIndex`
+- `MsfWriter.writeFile(file, compressionType, compressionLevel, warnings)` entry point; existing `writeFile(file, warnings)` delegates to ZSTD at default level 3
+
+#### msf-cli
+- `convert --compressor zstd|lz4|brotli|none` — choose the compression algorithm for MSF output
+- `convert --compression-level <int>` — set the compression level (ZSTD 1–22, 0 = default)
+- `convert --entities true|false` — include or exclude entities from MSF output
+- `convert --name <str>` and `--author <str>` — override metadata fields during conversion
+- `inspect` palette statistics: total block count and top 10 entries by frequency
+- `inspect --format json` — machine-readable JSON output for CI pipelines
+- `inspect --warnings` and `validate --warnings` — print parser warnings to stderr
+- Version disambiguation: all output shows "Format: V1.0" (from file) and "msf-cli: 1.1.0" separately
+
+#### msf-fabric
+- `/msf place` accepts explicit facing (0–3), mirror (none/x/z), and layer name filter
+- `/msf extract` gains `entities` flag and `name` override
+- `/msf list` — paginated schematic browser (8 per page, clickable navigation)
+- `/msf info <filename>` — in-chat schematic inspector with format version and mod version
+- Mirror support in `RegionPlacer`: `BlockMirror` applied after rotation per spec §10.3
+- `CanonicalFacing.fromCwOrdinal(int)` for reverse lookup from Brigadier arguments
+- Version disambiguation: all output shows format version and "msf-fabric: 1.1.0+1.21.1" separately
+
+#### Spec
+- V1_O revision: region overlap rule (§6.4), 4 GiB forward-compat note (§3.6), lighting hints stub (§3.3), test vector appendix (Appendix G), per-region palette rationale (§4.1), zstd level recommendation (§7.2), thumbnail dimension guidance (§5.2), data version validation depth (§4.3), circular dependency reader obligation (§6.4)
 
 ## [1.0.0] — 2026-03-12
 
-### Summary
+### Added
 
-Initial release of MSF (Minecraft Structured Format) — a binary schematic file format for Minecraft structures, with a Java reference implementation across three modules.
+#### msf-core
+- MSF Specification V1 — normative binary format definition with frozen 48-byte header, append-only versioning contract, and universal V1 forward compatibility
+- Complete MSF reader and writer with header validation sequence (magic → checksum → version), xxHash3-64 checksums, and configurable checksum failure handling
+- Global palette with ID 0 = AIR invariant, deduplication enforcement, and canonical blockstate property ordering
+- Layer index with semantic construction layers, dependency ordering, and per-layer region data
+- Region data: YZX block ordering, bit-packed palette IDs with no-span rule, per-region compression (ZSTD, LZ4, Brotli, none)
+- Biome data support at 4×4×4 section resolution with per-region local biome palettes
+- Entity and block entity blocks with typed position/rotation fields and automatic UUID stripping
+- Placement metadata: named anchor points, canonical facing, rotation compatibility flags, optional functional volume
+- Warning mechanism via `Consumer<MsfWarning>` — callers control routing, no default stdout/stderr output
+- In-house NBT reader and writer (no external NBT library dependency)
 
-### Specification
+#### msf-cli
+- `inspect` — human-readable MSF file summary
+- `validate` — structural validation against the MSF specification
+- `convert` — bidirectional conversion: `.nbt` ↔ `.msf`, `.litematic` ↔ `.msf`, `.litematic` ↔ `.nbt`
+- Litematica pending tick data silently dropped (rested-state placement is correct behavior)
 
-- MSF V1.0 — [docs/MSF_Specification_V1.md](docs/MSF_Specification_V1.md)
-- Covers: 48-byte frozen header, global palette (palette ID 0 = air invariant), metadata block, layer index, compressed region data, entity block, block entity block, file checksum (xxHash3-64), and the V1 versioning contract
-- Appendices: implementer compatibility guarantee, block type summary, canonical Minecraft property ordering, xxHash3 reference, unsigned integer handling in Java, deprecation policy, binary reference file examples
-- Minecraft target: Java Edition 1.13 and later; reference implementation targets 1.21.1
-
-### msf-core
-
-Pure Java 21 library; zero Fabric or Minecraft dependencies.
-
-**Format I/O**
-- `MsfReader` — reads MSF files from any `InputStream`; validates magic, header checksum, major version, and file checksum; delivers warnings via `Consumer<MsfWarning>`
-- `MsfWriter` — writes complete MSF files; computes header and file checksums; validates all field ranges before writing
-- `MsfReaderConfig` — caller-controlled strictness (e.g. `allowChecksumFailure`)
-
-**Data model** (immutable records with builders)
-- `MsfFile`, `MsfHeader`, `MsfPalette`, `MsfLayer`, `MsfRegion`, `MsfLayerIndex`, `MsfMetadata`, `MsfEntity`, `MsfBlockEntity`
-- Full placement metadata: anchor point, canonical facing (N/S/E/W), rotation compatibility flags, optional functional volume, tool name/version, recommended placement mode, MC edition
-
-**Codec**
-- Bit-packed block data (YZX ordering, global palette IDs, word-boundary-safe packing)
-- Biome data at 4×4×4 section resolution (YZX-quarter ordering)
-- Compression: zstd, lz4, brotli, none
-
-**Checksum**
-- xxHash3-64 via `org.lz4:lz4-java`; header checksum (bytes 0–39) and file checksum (all bytes except final 8)
-
-**NBT**
-- In-house `NbtReader` / `NbtWriter` — no external NBT library
-- Supports all 12 tag types; gzip and raw modes
-
-**Conversion**
-- `.nbt` (vanilla structure format) ↔ `.msf` round-trip via `VanillaStructureFormat`
-- `.litematic` (Litematica) ↔ `.msf` round-trip; pending tick data is silently dropped
-- Cross-format routing (e.g. `.litematic` → `.nbt` via MSF intermediate)
-
-**Utilities**
-- `UuidStripper` — strips entity and block entity UUIDs from raw NBT payloads
-- Exception hierarchy: `MsfException` → `MsfParseException`, `MsfVersionException`, `MsfChecksumException`, `MsfPaletteException`, `MsfCompressionException`
-- `MsfWarning` with 11 warning codes
-
-### msf-fabric
-
-Fabric 1.21.1 bridge; bundles msf-core.
-
-- `BlockStateBridge` — canonical blockstate string ↔ `BlockState` resolution against Minecraft registries
-- `EntityBridge` — `Entity` ↔ `MsfEntity` conversion; UUID stripping on write, UUID assignment on read
-- `BlockEntityBridge` — `BlockEntity` ↔ `MsfBlockEntity` conversion; excludes position and id tags
-- `BiomeBridge` — world biome queries at 4×4×4 resolution
-- `RegionExtractor` — extracts a world subvolume to `MsfFile`; assigns canonical facing and MC edition metadata
-- `RegionPlacer` — places `MsfFile` layers into the world with facing rotation (CW 90/180/270)
-- `CanonicalFacing` — canonical facing enum with clockwise rotation delta computation
-- `/msf extract` — server command; extracts selected region, writes to `msf-schematics/<filename>.msf`
-- `/msf place` — server command; reads and places schematic at player position with facing alignment
-
-### msf-cli
-
-Standalone CLI tool; depends on msf-core only.
-
-- `inspect` — prints version, file size, feature flags, palette size, and layer summary
-- `validate` — checks structure, checksums, and palette; reports warnings and errors; exit codes 0/1/2
-- `convert` — routes by input/output extension; supports `.nbt`, `.litematic`, `.msf`
-- Distributed as a self-contained fat jar (`msf-cli-1.0.0.jar`); requires Java 21
-
-### Infrastructure
-
-- GitHub Actions CI/CD: build and test on push and PR to `develop` and `main`; Java 21; Gradle dependency cache
-- Version sourced from a single location (`allprojects.version` in root `build.gradle.kts`)
-- CLI fat jar built with Shadow plugin (`./gradlew :msf-cli:shadowJar`)
-
-[1.0.0]: https://github.com/johnverheek/msf/releases/tag/v1.0.0
+#### msf-fabric
+- `/msf extract` — extract a world region to an MSF file with canonical facing from player direction
+- `/msf place` — place an MSF file in-world with rotation derived from canonical-to-target facing delta
+- Fabric 1.21.1 bridge: `BlockStateBridge`, `EntityBridge`, `BlockEntityBridge`, `BiomeBridge`
+- Block state validation against Minecraft registries via `BlockStateValidator`
+- Data version checking via `DataVersionChecker`
