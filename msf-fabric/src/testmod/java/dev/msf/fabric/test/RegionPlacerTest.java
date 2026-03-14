@@ -9,6 +9,7 @@ import dev.msf.core.model.MsfMetadata;
 import dev.msf.core.model.MsfPalette;
 import dev.msf.core.model.MsfRegion;
 import dev.msf.fabric.world.CanonicalFacing;
+import dev.msf.fabric.world.Mirror;
 import dev.msf.fabric.world.PlacementOptions;
 import dev.msf.fabric.world.RegionPlacer;
 import net.fabricmc.fabric.api.gametest.v1.FabricGameTest;
@@ -88,7 +89,7 @@ public class RegionPlacerTest implements FabricGameTest {
             .build();
 
         PlacementOptions skipAir = new PlacementOptions(
-            true, false, false, CanonicalFacing.NORTH, CanonicalFacing.NORTH
+            true, false, false, CanonicalFacing.NORTH, CanonicalFacing.NORTH, Mirror.NONE
         );
         BlockPos anchor = ctx.getAbsolutePos(new BlockPos(1, 1, 1));
         RegionPlacer.place(file, ctx.getWorld(), anchor, skipAir);
@@ -127,7 +128,7 @@ public class RegionPlacerTest implements FabricGameTest {
 
         // Rotate from NORTH to EAST (CW90)
         PlacementOptions opts = new PlacementOptions(
-            false, false, false, CanonicalFacing.NORTH, CanonicalFacing.EAST
+            false, false, false, CanonicalFacing.NORTH, CanonicalFacing.EAST, Mirror.NONE
         );
         BlockPos anchor = ctx.getAbsolutePos(new BlockPos(2, 2, 2));
         RegionPlacer.place(file, ctx.getWorld(), anchor, opts);

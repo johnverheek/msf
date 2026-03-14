@@ -31,6 +31,22 @@ public enum CanonicalFacing {
     }
 
     /**
+     * Looks up a {@code CanonicalFacing} from a clockwise ordinal (North=0, East=1, South=2, West=3).
+     * The input is normalised modulo 4, so values outside [0,3] wrap correctly.
+     *
+     * @param ordinal clockwise ordinal of the target direction
+     * @return the corresponding enum constant
+     */
+    public static CanonicalFacing fromCwOrdinal(int ordinal) {
+        return switch (((ordinal % 4) + 4) % 4) {
+            case 0 -> NORTH;
+            case 1 -> EAST;
+            case 2 -> SOUTH;
+            default -> WEST;
+        };
+    }
+
+    /**
      * Looks up a {@code CanonicalFacing} from its MSF byte value.
      *
      * @param value MSF canonical facing value (0–3)

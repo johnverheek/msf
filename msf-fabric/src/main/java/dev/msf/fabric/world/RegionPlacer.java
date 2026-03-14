@@ -15,6 +15,7 @@ import dev.msf.fabric.bridge.EntityBridge;
 import net.minecraft.block.Block;
 import net.minecraft.block.BlockState;
 import net.minecraft.entity.Entity;
+import net.minecraft.util.BlockMirror;
 import net.minecraft.util.BlockRotation;
 import net.minecraft.util.math.BlockPos;
 import net.minecraft.server.world.ServerWorld;
@@ -79,11 +80,12 @@ public final class RegionPlacer {
     ) throws MsfPaletteException, MsfParseException {
         MsfPalette globalPalette = file.palette();
         BlockRotation rotation = computeRotation(options.canonicalFacing(), options.targetFacing());
+        BlockMirror mirror = options.mirror().toBlockMirror();
 
         // Phase 1: place all blocks across all layers and regions
         for (MsfLayer layer : file.layerIndex().layers()) {
             for (MsfRegion region : layer.regions()) {
-                placeBlocks(region, globalPalette, world, anchorPos, options, rotation);
+                placeBlocks(region, globalPalette, world, anchorPos, options, rotation, mirror);
             }
         }
 
@@ -91,10 +93,11 @@ public final class RegionPlacer {
         if (options.placeBlockEntities() && file.blockEntities().isPresent()) {
             for (MsfBlockEntity msfBe : file.blockEntities().get()) {
                 int[] rotXZ = rotatePosition(msfBe.positionX(), msfBe.positionZ(), rotation);
+                int[] mirXZ = mirrorPosition(rotXZ[0], rotXZ[1], mirror);
                 BlockPos worldPos = new BlockPos(
-                    anchorPos.getX() + rotXZ[0],
+                    anchorPos.getX() + mirXZ[0],
                     anchorPos.getY() + msfBe.positionY(),
-                    anchorPos.getZ() + rotXZ[1]
+                    anchorPos.getZ() + mirXZ[1]
                 );
                 BlockEntityBridge.applyToWorld(msfBe, world, worldPos);
             }
@@ -136,7 +139,8 @@ public final class RegionPlacer {
         PlacementOptions options
     ) throws MsfPaletteException {
         placeBlocks(region, globalPalette, world, anchorPos, options,
-            computeRotation(options.canonicalFacing(), options.targetFacing()));
+            computeRotation(options.canonicalFacing(), options.targetFacing()),
+            options.mirror().toBlockMirror());
     }
 
     // =========================================================================
@@ -154,7 +158,8 @@ public final class RegionPlacer {
         ServerWorld world,
         BlockPos anchorPos,
         PlacementOptions options,
-        BlockRotation rotation
+        BlockRotation rotation,
+        BlockMirror mirror
     ) throws MsfPaletteException {
         int sizeX = region.sizeX();
         int sizeY = region.sizeY();
@@ -182,21 +187,26 @@ public final class RegionPlacer {
                         globalPalette.entries().get(paletteId)
                     );
 
-                    // Apply blockstate rotation using Minecraft's property API (Section 10.2)
+                    // Apply blockstate rotation then mirror using Minecraft's property API
+                    // (Section 10.2, Section 10.3 — mirror is applied after rotation)
                     if (rotation != BlockRotation.NONE) {
                         state = state.rotate(rotation);
                     }
+                    if (mirror != BlockMirror.NONE) {
+                        state = state.mirror(mirror);
+                    }
 
-                    // Rotate position around the anchor (Section 10.2)
+                    // Rotate then mirror position around the anchor
                     int localX = region.originX() + x;
                     int localY = region.originY() + y;
                     int localZ = region.originZ() + z;
                     int[] rotXZ = rotatePosition(localX, localZ, rotation);
+                    int[] mirXZ = mirrorPosition(rotXZ[0], rotXZ[1], mirror);
 
                     BlockPos worldPos = new BlockPos(
-                        anchorPos.getX() + rotXZ[0],
+                        anchorPos.getX() + mirXZ[0],
                         anchorPos.getY() + localY,
-                        anchorPos.getZ() + rotXZ[1]
+                        anchorPos.getZ() + mirXZ[1]
                     );
 
                     world.setBlockState(worldPos, state, Block.NOTIFY_ALL);
@@ -245,6 +255,30 @@ public final class RegionPlacer {
             case CLOCKWISE_90        -> new int[]{-localZ,  localX};
             case CLOCKWISE_180       -> new int[]{-localX, -localZ};
             case COUNTERCLOCKWISE_90 -> new int[]{ localZ, -localX};
+        };
+    }
+
+    /**
+     * Mirrors a local (X, Z) position around the anchor (origin) after rotation has
+     * already been applied.
+     *
+     * <p>Formulas (Y unchanged):
+     * <ul>
+     *   <li>NONE:       {@code (x,  z)}</li>
+     *   <li>LEFT_RIGHT: {@code (x, -z)} — mirrors across X axis (flips Z)</li>
+     *   <li>FRONT_BACK: {@code (-x,  z)} — mirrors across Z axis (flips X)</li>
+     * </ul>
+     *
+     * @param rotX rotated X component relative to the anchor
+     * @param rotZ rotated Z component relative to the anchor
+     * @param mirror the mirror to apply
+     * @return {@code [mirroredX, mirroredZ]}
+     */
+    static int[] mirrorPosition(int rotX, int rotZ, BlockMirror mirror) {
+        return switch (mirror) {
+            case NONE       -> new int[]{ rotX,  rotZ};
+            case LEFT_RIGHT -> new int[]{ rotX, -rotZ};
+            case FRONT_BACK -> new int[]{-rotX,  rotZ};
         };
     }
 }
