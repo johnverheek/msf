@@ -4,6 +4,7 @@ import dev.msf.core.MsfCompressionException;
 import dev.msf.core.MsfParseException;
 import dev.msf.core.MsfWarning;
 import dev.msf.core.compression.CompressionType;
+import dev.msf.core.compression.RegionCompressor;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
@@ -237,6 +238,21 @@ public final class MsfLayer {
             CompressionType compressionType,
             boolean hasBiomes,
             Consumer<MsfWarning> warningConsumer) throws MsfCompressionException {
+        return toBytes(paletteSize, compressionType, RegionCompressor.DEFAULT_ZSTD_LEVEL,
+                hasBiomes, warningConsumer);
+    }
+
+    /**
+     * Serializes this layer to bytes using the given compression type and level.
+     *
+     * @param compressionLevel compression level (meaningful for ZSTD only; ignored otherwise)
+     */
+    public byte[] toBytes(
+            int paletteSize,
+            CompressionType compressionType,
+            int compressionLevel,
+            boolean hasBiomes,
+            Consumer<MsfWarning> warningConsumer) throws MsfCompressionException {
         // Validate and sanitize flags (Section 6.3)
         int rawFlags = flags;
         int sanitized = rawFlags & FLAGS_DEFINED_MASK;
@@ -279,7 +295,7 @@ public final class MsfLayer {
             out.write(regions.size() & 0xFF);
             // Inline region data
             for (MsfRegion region : regions) {
-                out.write(region.toBytes(paletteSize, compressionType, hasBiomes));
+                out.write(region.toBytes(paletteSize, compressionType, compressionLevel, hasBiomes));
             }
         } catch (IOException e) {
             throw new AssertionError("ByteArrayOutputStream threw unexpectedly", e);

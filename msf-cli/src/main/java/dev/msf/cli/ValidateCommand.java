@@ -41,6 +41,7 @@ public class ValidateCommand implements Callable<Integer> {
     @Override
     public Integer call() {
         System.out.println("Validating: " + file);
+        System.out.println(MsfCli.TOOL_NAME + ": " + MsfCli.IMPL_VERSION);
         System.out.println();
 
         // --- Check 1: file exists and is readable ---
@@ -359,6 +360,12 @@ public class ValidateCommand implements Callable<Integer> {
         // -----------------------------------------------------------------------
         // Print results
         // -----------------------------------------------------------------------
+        // Story V1.1: include format version if the file parsed successfully
+        if (msf != null) {
+            System.out.println("Format: V" + msf.header().majorVersion()
+                    + "." + msf.header().minorVersion());
+            System.out.println();
+        }
         for (CheckResult cr : checks) {
             System.out.println(cr.toLine());
         }

@@ -4,6 +4,7 @@ import dev.msf.cli.convert.LitematicaFormatTest;
 import dev.msf.cli.convert.NbtReader;
 import dev.msf.cli.convert.NbtTag;
 import dev.msf.cli.convert.NbtWriter;
+import dev.msf.core.compression.CompressionType;
 import dev.msf.core.io.MsfReader;
 import dev.msf.core.io.MsfReaderConfig;
 import dev.msf.core.model.MsfFile;
@@ -246,5 +247,220 @@ class ConvertCommandTest {
         NbtTag.CompoundTag root = NbtReader.readCompound(nbtBytes);
         assertTrue(root.entries().containsKey("blocks"),  "Must have blocks");
         assertTrue(root.entries().containsKey("palette"), "Must have palette");
+    }
+
+    // =========================================================================
+    // C1.1: --compressor flag tests
+    // =========================================================================
+
+    @Test
+    void convertWithLz4Compressor_producesValidMsf() throws Exception {
+        Path nbtFile = tempDir.resolve("s.nbt");
+        Path msfFile = tempDir.resolve("s_lz4.msf");
+        Files.write(nbtFile, minimalVanillaNbt());
+
+        RunResult r = run("convert", "--compressor", "lz4", nbtFile.toString(), msfFile.toString());
+        assertEquals(0, r.exitCode(), "lz4 convert must succeed: " + r.stderr());
+
+        MsfFile msf = MsfReader.readFile(Files.readAllBytes(msfFile), MsfReaderConfig.DEFAULT, null);
+        assertEquals(CompressionType.LZ4,
+                msf.layerIndex().layers().get(0).regions().get(0).compressionType(),
+                "Region compression type must be LZ4");
+    }
+
+    @Test
+    void convertWithNoneCompressor_producesValidMsf() throws Exception {
+        Path nbtFile = tempDir.resolve("s.nbt");
+        Path msfFile = tempDir.resolve("s_none.msf");
+        Files.write(nbtFile, minimalVanillaNbt());
+
+        RunResult r = run("convert", "--compressor", "none", nbtFile.toString(), msfFile.toString());
+        assertEquals(0, r.exitCode(), "none compressor must succeed: " + r.stderr());
+
+        MsfFile msf = MsfReader.readFile(Files.readAllBytes(msfFile), MsfReaderConfig.DEFAULT, null);
+        assertEquals(CompressionType.NONE,
+                msf.layerIndex().layers().get(0).regions().get(0).compressionType(),
+                "Region compression type must be NONE");
+    }
+
+    @Test
+    void convertWithInvalidCompressor_rejectsWithExitCode2() throws Exception {
+        Path nbtFile = tempDir.resolve("s.nbt");
+        Path msfFile = tempDir.resolve("s_bad.msf");
+        Files.write(nbtFile, minimalVanillaNbt());
+
+        RunResult r = run("convert", "--compressor", "bogus", nbtFile.toString(), msfFile.toString());
+        assertEquals(2, r.exitCode(), "Invalid compressor must produce exit code 2");
+        assertTrue(r.stderr().toLowerCase().contains("error") || r.stderr().toLowerCase().contains("invalid"),
+                "Error message expected in stderr");
+    }
+
+    @Test
+    void convertWithCompressionLevel9_producesValidMsf() throws Exception {
+        Path nbtFile = tempDir.resolve("s.nbt");
+        Path msfFile = tempDir.resolve("s_l9.msf");
+        Files.write(nbtFile, minimalVanillaNbt());
+
+        RunResult r = run("convert", "--compression-level", "9", nbtFile.toString(), msfFile.toString());
+        assertEquals(0, r.exitCode(), "compression-level 9 must succeed: " + r.stderr());
+
+        MsfFile msf = MsfReader.readFile(Files.readAllBytes(msfFile), MsfReaderConfig.DEFAULT, null);
+        assertNotNull(msf);
+    }
+
+    @Test
+    void convertWithInvalidCompressionLevel_rejectsWithExitCode2() throws Exception {
+        Path nbtFile = tempDir.resolve("s.nbt");
+        Path msfFile = tempDir.resolve("s_bad.msf");
+        Files.write(nbtFile, minimalVanillaNbt());
+
+        RunResult r = run("convert", "--compression-level", "99",
+                nbtFile.toString(), msfFile.toString());
+        assertEquals(2, r.exitCode(), "Out-of-range compression level must produce exit code 2");
+    }
+
+    @Test
+    void convertRoundTrip_allCompressors_preserveBlockData() throws Exception {
+        for (String comp : List.of("zstd", "lz4", "none")) {
+            Path nbtFile = tempDir.resolve("s_" + comp + ".nbt");
+            Path msfFile = tempDir.resolve("s_" + comp + ".msf");
+            Path nbtOut  = tempDir.resolve("s_" + comp + "_out.nbt");
+            Files.write(nbtFile, minimalVanillaNbt());
+
+            run("convert", "--compressor", comp, nbtFile.toString(), msfFile.toString());
+            run("convert", msfFile.toString(), nbtOut.toString());
+
+            NbtTag.CompoundTag origNbt = NbtReader.readCompound(Files.readAllBytes(nbtFile));
+            NbtTag.CompoundTag convNbt = NbtReader.readCompound(Files.readAllBytes(nbtOut));
+
+            int origBlocks = ((NbtTag.ListTag) origNbt.entries().get("blocks")).elements().size();
+            int convBlocks = ((NbtTag.ListTag) convNbt.entries().get("blocks")).elements().size();
+            assertEquals(origBlocks, convBlocks,
+                    "Block count must survive round-trip with compressor=" + comp);
+        }
+    }
+
+    // =========================================================================
+    // C1.2: --entities flag tests
+    // =========================================================================
+
+    @Test
+    void convertWithEntitiesFalse_outputHasNoEntityBlocks() throws Exception {
+        Path nbtFile = tempDir.resolve("s.nbt");
+        Path msfFile = tempDir.resolve("s_noent.msf");
+        Files.write(nbtFile, minimalVanillaNbt());
+
+        RunResult r = run("convert", "--entities", "false", nbtFile.toString(), msfFile.toString());
+        assertEquals(0, r.exitCode(), "--entities false must succeed: " + r.stderr());
+
+        MsfFile msf = MsfReader.readFile(Files.readAllBytes(msfFile), MsfReaderConfig.DEFAULT, null);
+        assertTrue(msf.entities().isEmpty(), "No entity block when --entities false");
+        assertTrue(msf.blockEntities().isEmpty(), "No block entity block when --entities false");
+        assertEquals(0, msf.header().featureFlags()
+                & (dev.msf.core.model.MsfHeader.FeatureFlags.HAS_ENTITIES
+                   | dev.msf.core.model.MsfHeader.FeatureFlags.HAS_BLOCK_ENTITIES),
+                "Feature flags must have HAS_ENTITIES and HAS_BLOCK_ENTITIES cleared");
+    }
+
+    @Test
+    void convertWithEntitiesTrue_defaultBehaviourUnchanged() throws Exception {
+        Path nbtFile = tempDir.resolve("s.nbt");
+        Path msfDefaults = tempDir.resolve("s_defaults.msf");
+        Path msfExplicit = tempDir.resolve("s_explicit.msf");
+        Files.write(nbtFile, minimalVanillaNbt());
+
+        run("convert", nbtFile.toString(), msfDefaults.toString());
+        run("convert", "--entities", "true", nbtFile.toString(), msfExplicit.toString());
+
+        MsfFile def = MsfReader.readFile(Files.readAllBytes(msfDefaults), MsfReaderConfig.DEFAULT, null);
+        MsfFile exp = MsfReader.readFile(Files.readAllBytes(msfExplicit), MsfReaderConfig.DEFAULT, null);
+
+        assertEquals(def.palette().entries(), exp.palette().entries(),
+                "--entities true must produce same palette as default");
+    }
+
+    // =========================================================================
+    // C1.3: --name and --author flag tests
+    // =========================================================================
+
+    @Test
+    void convertWithNameOverride_setsNameInMetadata() throws Exception {
+        Path nbtFile = tempDir.resolve("s.nbt");
+        Path msfFile = tempDir.resolve("s_named.msf");
+        Files.write(nbtFile, minimalVanillaNbt());
+
+        RunResult r = run("convert", "--name", "My Schematic", nbtFile.toString(), msfFile.toString());
+        assertEquals(0, r.exitCode(), "--name must succeed: " + r.stderr());
+
+        MsfFile msf = MsfReader.readFile(Files.readAllBytes(msfFile), MsfReaderConfig.DEFAULT, null);
+        assertEquals("My Schematic", msf.metadata().name(), "Metadata name must match --name override");
+    }
+
+    @Test
+    void convertWithAuthorOverride_setsAuthorInMetadata() throws Exception {
+        Path nbtFile = tempDir.resolve("s.nbt");
+        Path msfFile = tempDir.resolve("s_auth.msf");
+        Files.write(nbtFile, minimalVanillaNbt());
+
+        RunResult r = run("convert", "--author", "Builder Bot", nbtFile.toString(), msfFile.toString());
+        assertEquals(0, r.exitCode(), "--author must succeed: " + r.stderr());
+
+        MsfFile msf = MsfReader.readFile(Files.readAllBytes(msfFile), MsfReaderConfig.DEFAULT, null);
+        assertEquals("Builder Bot", msf.metadata().author(), "Metadata author must match --author override");
+    }
+
+    // =========================================================================
+    // V1.1: version disambiguation tests
+    // =========================================================================
+
+    @Test
+    void inspect_showsFormatVersionAndImplVersion() throws Exception {
+        // Build a minimal valid MSF and run inspect on it
+        Path nbtFile = tempDir.resolve("s.nbt");
+        Path msfFile = tempDir.resolve("s.msf");
+        Files.write(nbtFile, minimalVanillaNbt());
+        run("convert", nbtFile.toString(), msfFile.toString());
+
+        RunResult r = run("inspect", msfFile.toString());
+        assertEquals(0, r.exitCode(), "inspect must succeed: " + r.stderr());
+
+        // Story V1.1: "Format: V1.0" and "msf-cli: 1.1.0" must appear
+        assertTrue(r.stdout().contains("Format:"), "Output must contain 'Format:' label");
+        assertTrue(r.stdout().contains("V1."), "Output must contain 'V1.' format version");
+        assertTrue(r.stdout().contains(MsfCli.TOOL_NAME + ":"), "Output must contain tool name label");
+        assertTrue(r.stdout().contains(MsfCli.IMPL_VERSION), "Output must contain impl version");
+    }
+
+    @Test
+    void validate_showsImplVersion() throws Exception {
+        Path nbtFile = tempDir.resolve("s.nbt");
+        Path msfFile = tempDir.resolve("s.msf");
+        Files.write(nbtFile, minimalVanillaNbt());
+        run("convert", nbtFile.toString(), msfFile.toString());
+
+        RunResult r = run("validate", msfFile.toString());
+        assertEquals(0, r.exitCode(), "validate must succeed: " + r.stderr());
+        assertTrue(r.stdout().contains(MsfCli.IMPL_VERSION), "validate output must contain impl version");
+    }
+
+    // =========================================================================
+    // parseCompressor helper unit tests
+    // =========================================================================
+
+    @Test
+    void parseCompressor_validValues() {
+        assertEquals(CompressionType.ZSTD,   ConvertCommand.parseCompressor("zstd"));
+        assertEquals(CompressionType.LZ4,    ConvertCommand.parseCompressor("lz4"));
+        assertEquals(CompressionType.BROTLI, ConvertCommand.parseCompressor("brotli"));
+        assertEquals(CompressionType.NONE,   ConvertCommand.parseCompressor("none"));
+        // Case-insensitive
+        assertEquals(CompressionType.ZSTD,   ConvertCommand.parseCompressor("ZSTD"));
+    }
+
+    @Test
+    void parseCompressor_invalidValue_throwsIllegalArgument() {
+        assertThrows(IllegalArgumentException.class,
+                () -> ConvertCommand.parseCompressor("gzip"),
+                "Unknown compressor name must throw IllegalArgumentException");
     }
 }

@@ -79,7 +79,9 @@ public class InspectCommand implements Callable<Integer> {
         // --- File ---
         line("File", filename);
         line("File size", fileBytes.length + " bytes");
-        line("Spec version", "1." + hdr.minorVersion());
+        // Story V1.1: "Format" for spec version, tool name for implementation version
+        line("Format", "V" + hdr.majorVersion() + "." + hdr.minorVersion());
+        line(MsfCli.TOOL_NAME, MsfCli.IMPL_VERSION);
         line("MC data version", Long.toUnsignedString(hdr.mcDataVersion()));
         line("Feature flags", "0x" + String.format("%08X", hdr.featureFlags() & 0xFFFFFFFFL)
                 + " (" + featureFlagNames(hdr.featureFlags()) + ")");

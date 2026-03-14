@@ -4,6 +4,7 @@ import dev.msf.core.MsfCompressionException;
 import dev.msf.core.MsfParseException;
 import dev.msf.core.MsfWarning;
 import dev.msf.core.compression.CompressionType;
+import dev.msf.core.compression.RegionCompressor;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
@@ -74,6 +75,21 @@ public record MsfLayerIndex(List<MsfLayer> layers) {
             CompressionType compressionType,
             boolean hasBiomes,
             Consumer<MsfWarning> warningConsumer) throws MsfCompressionException {
+        return toBytes(paletteSize, compressionType, RegionCompressor.DEFAULT_ZSTD_LEVEL,
+                hasBiomes, warningConsumer);
+    }
+
+    /**
+     * Serializes the layer index block to bytes using the given compression type and level.
+     *
+     * @param compressionLevel compression level (meaningful for ZSTD only; ignored otherwise)
+     */
+    public byte[] toBytes(
+            int paletteSize,
+            CompressionType compressionType,
+            int compressionLevel,
+            boolean hasBiomes,
+            Consumer<MsfWarning> warningConsumer) throws MsfCompressionException {
         int layerCount = layers.size();
         if (layerCount < 1) {
             throw new IllegalArgumentException(
@@ -92,7 +108,8 @@ public record MsfLayerIndex(List<MsfLayer> layers) {
             body.write(layerCount & 0xFF);
             // Per-layer data
             for (MsfLayer layer : layers) {
-                body.write(layer.toBytes(paletteSize, compressionType, hasBiomes, warningConsumer));
+                body.write(layer.toBytes(paletteSize, compressionType, compressionLevel,
+                        hasBiomes, warningConsumer));
             }
         } catch (IOException e) {
             throw new AssertionError("ByteArrayOutputStream threw unexpectedly", e);

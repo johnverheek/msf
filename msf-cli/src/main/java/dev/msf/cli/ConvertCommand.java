@@ -6,16 +6,21 @@ import dev.msf.cli.convert.NbtTag;
 import dev.msf.cli.convert.NbtWriter;
 import dev.msf.cli.convert.VanillaStructureFormat;
 import dev.msf.core.MsfException;
+import dev.msf.core.compression.CompressionType;
 import dev.msf.core.io.MsfReader;
 import dev.msf.core.io.MsfReaderConfig;
 import dev.msf.core.io.MsfWriter;
 import dev.msf.core.model.MsfFile;
+import dev.msf.core.model.MsfHeader;
+import dev.msf.core.model.MsfMetadata;
 import picocli.CommandLine.Command;
+import picocli.CommandLine.Option;
 import picocli.CommandLine.Parameters;
 
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Locale;
 import java.util.concurrent.Callable;
 
 /**
@@ -51,10 +56,69 @@ public class ConvertCommand implements Callable<Integer> {
     @Parameters(index = "1", paramLabel = "<output>", description = "Output file (.msf, .nbt, or .litematic).")
     private Path output;
 
+    // Story C1.1: compressor and compression-level flags
+    @Option(
+        names = "--compressor",
+        paramLabel = "zstd|lz4|brotli|none",
+        description = "Compression algorithm for .msf output (default: zstd). Per spec §7.2, zstd is RECOMMENDED.",
+        defaultValue = "zstd"
+    )
+    private String compressor;
+
+    @Option(
+        names = "--compression-level",
+        paramLabel = "<int>",
+        description = "Compression level for zstd (1–22; default: 3 per spec §7.2). Ignored for other compressors.",
+        defaultValue = "3"
+    )
+    private int compressionLevel;
+
+    // Story C1.2: entities toggle (arity=1 so --entities false works, not just a flag)
+    @Option(
+        names = "--entities",
+        paramLabel = "true|false",
+        description = "Include entities and block entities in .msf output (default: true).",
+        defaultValue = "true",
+        arity = "1"
+    )
+    private boolean includeEntities;
+
+    // Story C1.3: metadata override
+    @Option(
+        names = "--name",
+        paramLabel = "<str>",
+        description = "Override the schematic name in .msf metadata."
+    )
+    private String nameOverride;
+
+    @Option(
+        names = "--author",
+        paramLabel = "<str>",
+        description = "Override the author field in .msf metadata."
+    )
+    private String authorOverride;
+
     @Override
     public Integer call() {
         if (!Files.exists(input)) {
             System.err.println("Error: file not found: " + input);
+            return 2;
+        }
+
+        // Validate compressor name early (Story C1.1)
+        CompressionType compressionType;
+        try {
+            compressionType = parseCompressor(compressor);
+        } catch (IllegalArgumentException e) {
+            System.err.println("Error: " + e.getMessage());
+            return 2;
+        }
+
+        // Validate compression level for zstd (Story C1.1)
+        if (compressionType == CompressionType.ZSTD
+                && (compressionLevel < 1 || compressionLevel > 22)) {
+            System.err.println("Error: invalid --compression-level " + compressionLevel
+                    + " for zstd (valid range: 1–22)");
             return 2;
         }
 
@@ -72,8 +136,8 @@ public class ConvertCommand implements Callable<Integer> {
         try {
             if (inExt.equals("nbt") && outExt.equals("msf")) {
                 NbtTag.CompoundTag nbtRoot = NbtReader.readCompound(inputBytes);
-                MsfFile msf = VanillaStructureFormat.nbtToMsf(nbtRoot);
-                Files.write(output, MsfWriter.writeFile(msf, null));
+                MsfFile msf = applyOptions(VanillaStructureFormat.nbtToMsf(nbtRoot));
+                Files.write(output, MsfWriter.writeFile(msf, compressionType, compressionLevel, null));
 
             } else if (inExt.equals("msf") && outExt.equals("nbt")) {
                 MsfFile msf = MsfReader.readFile(inputBytes, MsfReaderConfig.DEFAULT, null);
@@ -82,8 +146,8 @@ public class ConvertCommand implements Callable<Integer> {
 
             } else if (inExt.equals("litematic") && outExt.equals("msf")) {
                 NbtTag.CompoundTag litRoot = NbtReader.readCompound(inputBytes);
-                MsfFile msf = LitematicaFormat.litematicToMsf(litRoot);
-                Files.write(output, MsfWriter.writeFile(msf, null));
+                MsfFile msf = applyOptions(LitematicaFormat.litematicToMsf(litRoot));
+                Files.write(output, MsfWriter.writeFile(msf, compressionType, compressionLevel, null));
 
             } else if (inExt.equals("msf") && outExt.equals("litematic")) {
                 MsfFile msf = MsfReader.readFile(inputBytes, MsfReaderConfig.DEFAULT, null);
@@ -122,9 +186,80 @@ public class ConvertCommand implements Callable<Integer> {
         }
     }
 
+    // -------------------------------------------------------------------------
+    // Option application
+    // -------------------------------------------------------------------------
+
+    /**
+     * Applies CLI option overrides (entities toggle, name/author) to an MsfFile produced
+     * by a converter. Returns either the original or a rebuilt file with options applied.
+     */
+    private MsfFile applyOptions(MsfFile msf) throws MsfException {
+        boolean needsRebuild = !includeEntities || nameOverride != null || authorOverride != null;
+        if (!needsRebuild) {
+            return msf;
+        }
+
+        MsfMetadata meta = msf.metadata();
+        MsfMetadata.Builder metaBuilder = MsfMetadata.builder()
+            .name(nameOverride != null ? nameOverride : meta.name())
+            .author(authorOverride != null ? authorOverride : meta.author())
+            .createdTimestamp(meta.createdTimestamp())
+            .modifiedTimestamp(meta.modifiedTimestamp())
+            .description(meta.description())
+            .tags(meta.tags())
+            .licenseIdentifier(meta.licenseIdentifier())
+            .anchorName(meta.anchorName())
+            .anchorOffset(meta.anchorOffsetX(), meta.anchorOffsetY(), meta.anchorOffsetZ())
+            .canonicalFacing(meta.canonicalFacing())
+            .rotationCompatibility(meta.rotationCompatibility())
+            .toolName(meta.toolName())
+            .toolVersion(meta.toolVersion())
+            .recommendedPlacementMode(meta.recommendedPlacementMode())
+            .mcEdition(meta.mcEdition());
+        meta.functionalVolume().ifPresent(metaBuilder::functionalVolume);
+
+        MsfFile.Builder fileBuilder = MsfFile.builder()
+            .mcDataVersion(msf.header().mcDataVersion())
+            .metadata(metaBuilder.build())
+            .palette(msf.palette())
+            .layerIndex(msf.layerIndex());
+
+        if (includeEntities) {
+            msf.entities().ifPresent(fileBuilder::entities);
+            msf.blockEntities().ifPresent(fileBuilder::blockEntities);
+        }
+        // When includeEntities=false, feature flags must not include entity bits.
+        // MsfFile.builder() derives feature flags from the presence of entities/blockEntities,
+        // so simply omitting them is sufficient.
+
+        return fileBuilder.build();
+    }
+
+    // -------------------------------------------------------------------------
+    // Helpers
+    // -------------------------------------------------------------------------
+
+    /**
+     * Parses the --compressor option value to a {@link CompressionType}.
+     *
+     * @throws IllegalArgumentException with a user-friendly message on invalid input
+     */
+    static CompressionType parseCompressor(String value) {
+        return switch (value.toLowerCase(Locale.ROOT)) {
+            case "zstd"   -> CompressionType.ZSTD;
+            case "lz4"    -> CompressionType.LZ4;
+            case "brotli" -> CompressionType.BROTLI;
+            case "none"   -> CompressionType.NONE;
+            default -> throw new IllegalArgumentException(
+                "invalid --compressor '" + value + "' (valid: zstd, lz4, brotli, none)"
+            );
+        };
+    }
+
     private static String extension(Path path) {
         String name = path.getFileName().toString();
         int dot = name.lastIndexOf('.');
-        return dot >= 0 ? name.substring(dot + 1).toLowerCase() : "";
+        return dot >= 0 ? name.substring(dot + 1).toLowerCase(Locale.ROOT) : "";
     }
 }

@@ -3,6 +3,7 @@ package dev.msf.core.io;
 import dev.msf.core.MsfException;
 import dev.msf.core.checksum.XxHash3;
 import dev.msf.core.compression.CompressionType;
+import dev.msf.core.compression.RegionCompressor;
 import dev.msf.core.model.MsfBlockEntity;
 import dev.msf.core.model.MsfEntity;
 import dev.msf.core.model.MsfFile;
@@ -91,6 +92,27 @@ public final class MsfWriter {
         MsfFile file,
         Consumer<MsfWarning> warningConsumer
     ) throws MsfException {
+        return writeFile(file, CompressionType.ZSTD, RegionCompressor.DEFAULT_ZSTD_LEVEL,
+                warningConsumer);
+    }
+
+    /**
+     * Serializes a complete {@link MsfFile} to a byte array using the given compression settings.
+     *
+     * @param file             the file to serialize
+     * @param compressionType  the compression algorithm to use for region payloads
+     * @param compressionLevel the compression level (meaningful for ZSTD only; per Section 7.2,
+     *                         level 3 is RECOMMENDED)
+     * @param warningConsumer  receives warnings produced during serialization; may be {@code null}
+     * @return the complete MSF file bytes including the 8-byte file checksum
+     * @throws MsfException if any block fails validation or compression fails
+     */
+    public static byte[] writeFile(
+        MsfFile file,
+        CompressionType compressionType,
+        int compressionLevel,
+        Consumer<MsfWarning> warningConsumer
+    ) throws MsfException {
         MsfHeader hdr            = file.header();
         boolean hasBiomes        = hdr.hasBiomeData();
         boolean hasEntities      = hdr.hasEntities();
@@ -113,7 +135,8 @@ public final class MsfWriter {
         byte[] metaBytes       = file.metadata().toBytes(warningConsumer);
         byte[] paletteBytes    = file.palette().toBytes();
         byte[] layerIndexBytes = file.layerIndex().toBytes(
-            file.palette().entries().size(), CompressionType.ZSTD, hasBiomes, warningConsumer
+            file.palette().entries().size(), compressionType, compressionLevel, hasBiomes,
+            warningConsumer
         );
 
         byte[] entityBytes      = null;

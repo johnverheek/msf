@@ -214,7 +214,8 @@ public final class MsfRegion {
     // -------------------------------------------------------------------------
 
     /**
-     * Serializes this region (header + compressed payload) to bytes.
+     * Serializes this region (header + compressed payload) to bytes at the default
+     * compression level.
      *
      * <p>The serialized region is embedded directly inside the layer index block —
      * there is no separate block_length prefix for individual regions. The region header
@@ -229,6 +230,22 @@ public final class MsfRegion {
      */
     public byte[] toBytes(int paletteSize, CompressionType compressionType, boolean hasBiomes)
             throws MsfCompressionException {
+        return toBytes(paletteSize, compressionType, RegionCompressor.DEFAULT_ZSTD_LEVEL, hasBiomes);
+    }
+
+    /**
+     * Serializes this region (header + compressed payload) to bytes at the given level.
+     *
+     * @param paletteSize     the global palette entry count (used to compute bits_per_entry)
+     * @param compressionType the compression algorithm to use; ZSTD is RECOMMENDED
+     * @param compressionLevel compression level (meaningful for ZSTD only; ignored otherwise)
+     * @param hasBiomes       whether to write biome data (must match feature flag bit 2)
+     * @return the complete bytes for this region (header + payload)
+     * @throws MsfCompressionException if compression fails
+     * @throws IllegalArgumentException if hasBiomes is true but biome data is absent
+     */
+    public byte[] toBytes(int paletteSize, CompressionType compressionType, int compressionLevel,
+            boolean hasBiomes) throws MsfCompressionException {
         if (hasBiomes && !hasBiomeData()) {
             throw new IllegalArgumentException(
                 "hasBiomes=true but no biome data is present in this region"
@@ -237,7 +254,8 @@ public final class MsfRegion {
 
         // Build the uncompressed payload
         byte[] uncompressedPayload = buildPayload(paletteSize, hasBiomes);
-        byte[] compressedPayload = RegionCompressor.compress(uncompressedPayload, compressionType);
+        byte[] compressedPayload = RegionCompressor.compress(
+                uncompressedPayload, compressionType, compressionLevel);
 
         // Build the region header bytes (everything before the payload)
         ByteArrayOutputStream out = new ByteArrayOutputStream();

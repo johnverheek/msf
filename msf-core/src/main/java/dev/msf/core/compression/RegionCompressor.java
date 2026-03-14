@@ -21,8 +21,11 @@ public final class RegionCompressor {
 
     private RegionCompressor() {}
 
+    /** Default zstd compression level (SHOULD recommendation per Section 7.2). */
+    public static final int DEFAULT_ZSTD_LEVEL = 3;
+
     /**
-     * Compresses a region payload using the given compression type.
+     * Compresses a region payload using the given compression type at its default level.
      *
      * @param data            the uncompressed payload bytes
      * @param compressionType the compression algorithm to apply
@@ -31,17 +34,35 @@ public final class RegionCompressor {
      */
     public static byte[] compress(byte[] data, CompressionType compressionType)
             throws MsfCompressionException {
+        return compress(data, compressionType, DEFAULT_ZSTD_LEVEL);
+    }
+
+    /**
+     * Compresses a region payload using the given compression type and level.
+     *
+     * <p>The {@code level} parameter is only meaningful for {@link CompressionType#ZSTD};
+     * for other types it is ignored. Per Section 7.2, zstd level 3 is RECOMMENDED; levels
+     * 6–9 are advisory for maximum compression.
+     *
+     * @param data            the uncompressed payload bytes
+     * @param compressionType the compression algorithm to apply
+     * @param level           compression level (zstd only; ignored for lz4/brotli/none)
+     * @return the compressed bytes
+     * @throws MsfCompressionException if compression fails
+     */
+    public static byte[] compress(byte[] data, CompressionType compressionType, int level)
+            throws MsfCompressionException {
         return switch (compressionType) {
             case NONE   -> Arrays.copyOf(data, data.length);
-            case ZSTD   -> compressZstd(data);
+            case ZSTD   -> compressZstd(data, level);
             case LZ4    -> compressLz4(data);
             case BROTLI -> compressBrotli(data);
         };
     }
 
-    private static byte[] compressZstd(byte[] data) throws MsfCompressionException {
+    private static byte[] compressZstd(byte[] data, int level) throws MsfCompressionException {
         try {
-            byte[] compressed = Zstd.compress(data);
+            byte[] compressed = Zstd.compress(data, level);
             if (Zstd.isError(compressed.length)) {
                 throw new MsfCompressionException(
                     "zstd compression failed: " + Zstd.getErrorName(compressed.length));
