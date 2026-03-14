@@ -1,7 +1,16 @@
 package dev.msf.core;
 
+import dev.msf.core.compression.CompressionType;
 import dev.msf.core.io.MsfWriter;
+import dev.msf.core.model.MsfBlockEntity;
+import dev.msf.core.model.MsfEntity;
+import dev.msf.core.model.MsfFile;
 import dev.msf.core.model.MsfHeader;
+import dev.msf.core.model.MsfLayer;
+import dev.msf.core.model.MsfLayerIndex;
+import dev.msf.core.model.MsfMetadata;
+import dev.msf.core.model.MsfPalette;
+import dev.msf.core.model.MsfRegion;
 import dev.msf.core.checksum.XxHash3;
 import org.junit.jupiter.api.Test;
 
@@ -13,6 +22,7 @@ import java.nio.ByteOrder;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.List;
 
 /**
  * Generates binary test reference files for the test resources directory.
@@ -75,7 +85,78 @@ class MsfReferenceFileGenerator {
         Files.write(resourceDir.resolve("file_size_mismatch.msf"), extended);
         System.out.println("Written file_size_mismatch.msf");
 
+        // --- Canonical format vectors (Epic 2) ---
+
+        MsfRegion airRegion = MsfRegion.builder().origin(0, 0, 0).size(1, 1, 1).build();
+
+        // 7. minimal.msf — no compression (NONE)
+        MsfFile minimalFile = buildCanonicalFile("minimal", airRegion);
+        Files.write(resourceDir.resolve("minimal.msf"),
+            MsfWriter.writeFile(minimalFile, CompressionType.NONE, null));
+        System.out.println("Written minimal.msf");
+
+        // 8. zstd.msf — ZSTD compression
+        MsfFile zstdFile = buildCanonicalFile("zstd", airRegion);
+        Files.write(resourceDir.resolve("zstd.msf"),
+            MsfWriter.writeFile(zstdFile, CompressionType.ZSTD, null));
+        System.out.println("Written zstd.msf");
+
+        // 9. lz4.msf — LZ4 compression
+        MsfFile lz4File = buildCanonicalFile("lz4", airRegion);
+        Files.write(resourceDir.resolve("lz4.msf"),
+            MsfWriter.writeFile(lz4File, CompressionType.LZ4, null));
+        System.out.println("Written lz4.msf");
+
+        // 10. brotli.msf — Brotli compression
+        MsfFile brotliFile = buildCanonicalFile("brotli", airRegion);
+        Files.write(resourceDir.resolve("brotli.msf"),
+            MsfWriter.writeFile(brotliFile, CompressionType.BROTLI, null));
+        System.out.println("Written brotli.msf");
+
+        // 11. entities.msf — ZSTD + one entity (armor stand) + one block entity (chest)
+        MsfEntity entity = MsfEntity.builder()
+            .position(0.5, 0.0, 0.5)
+            .rotation(0.0f, 0.0f)
+            .entityType("minecraft:armor_stand")
+            .nbtPayload(new byte[0])
+            .build();
+        MsfBlockEntity blockEntity = MsfBlockEntity.builder()
+            .position(0, 0, 0)
+            .blockEntityType("minecraft:chest")
+            .nbtPayload(new byte[0])
+            .build();
+        MsfFile entitiesFile = buildCanonicalFile("entities", airRegion);
+        entitiesFile = MsfFile.builder()
+            .mcDataVersion(entitiesFile.header().mcDataVersion())
+            .metadata(entitiesFile.metadata())
+            .palette(entitiesFile.palette())
+            .layerIndex(entitiesFile.layerIndex())
+            .entities(List.of(entity))
+            .blockEntities(List.of(blockEntity))
+            .build();
+        Files.write(resourceDir.resolve("entities.msf"),
+            MsfWriter.writeFile(entitiesFile, CompressionType.ZSTD, null));
+        System.out.println("Written entities.msf");
+
         System.out.println("Reference file generation complete.");
+    }
+
+    /**
+     * Builds a minimal, well-formed {@link MsfFile} with a single 1×1×1 air region
+     * suitable for use as a canonical format vector.
+     *
+     * @param name      schematic name embedded in metadata
+     * @param airRegion pre-built 1×1×1 air region
+     */
+    private static MsfFile buildCanonicalFile(String name, MsfRegion airRegion) throws Exception {
+        return MsfFile.builder()
+            .mcDataVersion(3953L)           // 1.21.1 data version
+            .metadata(MsfMetadata.builder().name(name).build())
+            .palette(MsfPalette.of(List.of(MsfPalette.AIR)))
+            .layerIndex(MsfLayerIndex.of(List.of(
+                MsfLayer.builder().layerId(1).name("l").addRegion(airRegion).build()
+            )))
+            .build();
     }
 
     /**

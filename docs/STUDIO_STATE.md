@@ -12,27 +12,25 @@ Revision: V1_N
 Status: Stable — no open 🔴 issues. No spec gate required for v1.0.0.
 
 ## Implementation
-Sessions completed: 1–12
-Last session: Session 12 — in-game /msf extract and /msf place commands, round-trip validation
-Test count: 269+
+Sessions completed: 1–13
+Last session: Session 13 — entity & block entity bridge, canonical test vectors
+Test count: msf-core 201+ | msf-cli 35 | msf-fabric 41 gametests
 
 ## Active Branch
 feature/v1.0.0-entity-bridge
 
 ## Next Action
-Session 13: Entity & BlockEntity fabric bridge
-Skill: code-mc-implementation
-Gate: docs/gates/v1.0.0/PLANNING_GATE.md
+Merge feature/v1.0.0-entity-bridge → develop, then release phase (app-release skill)
+Gate: docs/gates/v1.0.0/IMPLEMENTATION_GATE.md (complete)
 
 ## v1.0.0 Release Scope
 
-### Session 13 (code-mc-implementation)
-- EntityBridge: Minecraft Entity ↔ MsfEntity conversion, UUID stripping enforced
-- BlockEntityBridge: Minecraft BlockEntity ↔ MsfBlockEntity conversion, UUID stripping enforced
-- RegionExtractor: extend to capture entities and block entities within selection bounds
-- RegionPlacer: extend to spawn entities (new UUIDs) and restore block entities after block placement
-- Feature flag bits 0 and 1 wired end-to-end in /msf extract and /msf place
-- Canonical test vectors in test/resources (minimal, zstd, lz4, brotli, entities)
+### Session 13 ✅ Complete
+- RegionExtractor.extractEntities() / extractBlockEntities() wired in executeExtract
+- MsfWriter.writeFile(MsfFile, CompressionType, Consumer) overload added
+- Canonical test vectors committed: minimal, zstd, lz4, brotli, entities
+- 5 canonical vector validation tests in MsfReferenceFileTest
+- 4 new gametests: armor stand round-trip, chest round-trip, feature flags, no-entity place
 
 ### code-release task (after Session 13)
 - GitHub Actions: Maven Central publish for msf-core on tag push

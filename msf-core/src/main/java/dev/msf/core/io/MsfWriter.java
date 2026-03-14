@@ -33,8 +33,8 @@ import java.util.function.Consumer;
  * absolute final write operation.
  *
  * <h2>UUID stripping</h2>
- * <p>{@link #writeFile(MsfFile, Consumer)} invokes {@link UuidStripper#strip} on every
- * entity and block entity NBT payload before encoding per Sections 8.2 and 9.2.
+ * <p>{@link #writeFile(MsfFile, CompressionType, Consumer)} invokes {@link UuidStripper#strip}
+ * on every entity and block entity NBT payload before encoding per Sections 8.2 and 9.2.
  *
  * <h2>Warning mechanism</h2>
  * <p>Write-side warnings have an offset of {@code -1} since no file byte offset is
@@ -87,8 +87,35 @@ public final class MsfWriter {
      * @throws MsfPaletteException      if the palette has duplicate entries
      * @throws IllegalArgumentException if any NBT payload exceeds 65535 bytes after UUID stripping
      */
+    /**
+     * Serializes a complete {@link MsfFile} using the default ZSTD compression for
+     * region block data. Delegates to {@link #writeFile(MsfFile, CompressionType, Consumer)}.
+     *
+     * @param file            the file to serialize
+     * @param warningConsumer receives warnings produced during serialization; may be {@code null}
+     * @return the complete MSF file bytes including the 8-byte file checksum
+     * @throws MsfException if any block fails validation
+     */
     public static byte[] writeFile(
         MsfFile file,
+        Consumer<MsfWarning> warningConsumer
+    ) throws MsfException {
+        return writeFile(file, CompressionType.ZSTD, warningConsumer);
+    }
+
+    /**
+     * Serializes a complete {@link MsfFile} using the specified compression algorithm
+     * for region block data.
+     *
+     * @param file            the file to serialize
+     * @param compressionType compression algorithm to use for region block data
+     * @param warningConsumer receives warnings produced during serialization; may be {@code null}
+     * @return the complete MSF file bytes including the 8-byte file checksum
+     * @throws MsfException if any block fails validation
+     */
+    public static byte[] writeFile(
+        MsfFile file,
+        CompressionType compressionType,
         Consumer<MsfWarning> warningConsumer
     ) throws MsfException {
         MsfHeader hdr            = file.header();
@@ -113,7 +140,7 @@ public final class MsfWriter {
         byte[] metaBytes       = file.metadata().toBytes(warningConsumer);
         byte[] paletteBytes    = file.palette().toBytes();
         byte[] layerIndexBytes = file.layerIndex().toBytes(
-            file.palette().entries().size(), CompressionType.ZSTD, hasBiomes, warningConsumer
+            file.palette().entries().size(), compressionType, hasBiomes, warningConsumer
         );
 
         byte[] entityBytes      = null;

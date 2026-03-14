@@ -1,7 +1,9 @@
 package dev.msf.core;
 
+import dev.msf.core.compression.CompressionType;
 import dev.msf.core.io.MsfReader;
 import dev.msf.core.io.MsfReaderConfig;
+import dev.msf.core.model.MsfFile;
 import dev.msf.core.model.MsfHeader;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.EnabledIf;
@@ -116,5 +118,76 @@ class MsfReferenceFileTest {
         assertTrue(
                 warnings.stream().anyMatch(w -> w.code() == MsfWarning.Code.FILE_SIZE_MISMATCH),
                 "FILE_SIZE_MISMATCH warning expected");
+    }
+
+    // =========================================================================
+    // Canonical format vectors (Epic 2)
+    // =========================================================================
+
+    @SuppressWarnings("unused")
+    private static boolean canonicalVectorsExist() {
+        return MsfReferenceFileTest.class.getClassLoader().getResource("minimal.msf") != null;
+    }
+
+    @Test
+    @EnabledIf("canonicalVectorsExist")
+    void minimal_parsesSuccessfully_noCompression() throws Exception {
+        byte[] bytes = readResource("minimal.msf");
+        assertNotNull(bytes, "minimal.msf must be present");
+        MsfFile file = MsfReader.readFile(bytes, MsfReaderConfig.DEFAULT, null);
+        assertEquals(1, file.header().majorVersion());
+        assertEquals(1, file.layerIndex().layers().size());
+        assertEquals(1, file.layerIndex().layers().get(0).regions().size());
+        // Region must use NONE compression
+        assertEquals(CompressionType.NONE,
+            file.layerIndex().layers().get(0).regions().get(0).compressionType());
+        assertTrue(file.entities().isEmpty(), "minimal.msf must have no entity block");
+        assertTrue(file.blockEntities().isEmpty(), "minimal.msf must have no block entity block");
+    }
+
+    @Test
+    @EnabledIf("canonicalVectorsExist")
+    void zstd_parsesSuccessfully() throws Exception {
+        byte[] bytes = readResource("zstd.msf");
+        assertNotNull(bytes, "zstd.msf must be present");
+        MsfFile file = MsfReader.readFile(bytes, MsfReaderConfig.DEFAULT, null);
+        assertEquals(CompressionType.ZSTD,
+            file.layerIndex().layers().get(0).regions().get(0).compressionType());
+    }
+
+    @Test
+    @EnabledIf("canonicalVectorsExist")
+    void lz4_parsesSuccessfully() throws Exception {
+        byte[] bytes = readResource("lz4.msf");
+        assertNotNull(bytes, "lz4.msf must be present");
+        MsfFile file = MsfReader.readFile(bytes, MsfReaderConfig.DEFAULT, null);
+        assertEquals(CompressionType.LZ4,
+            file.layerIndex().layers().get(0).regions().get(0).compressionType());
+    }
+
+    @Test
+    @EnabledIf("canonicalVectorsExist")
+    void brotli_parsesSuccessfully() throws Exception {
+        byte[] bytes = readResource("brotli.msf");
+        assertNotNull(bytes, "brotli.msf must be present");
+        MsfFile file = MsfReader.readFile(bytes, MsfReaderConfig.DEFAULT, null);
+        assertEquals(CompressionType.BROTLI,
+            file.layerIndex().layers().get(0).regions().get(0).compressionType());
+    }
+
+    @Test
+    @EnabledIf("canonicalVectorsExist")
+    void entities_parsesSuccessfully_featureFlagsSet() throws Exception {
+        byte[] bytes = readResource("entities.msf");
+        assertNotNull(bytes, "entities.msf must be present");
+        MsfFile file = MsfReader.readFile(bytes, MsfReaderConfig.DEFAULT, null);
+        assertTrue(file.header().hasEntities(), "entities.msf must have feature flag bit 0 set");
+        assertTrue(file.header().hasBlockEntities(), "entities.msf must have feature flag bit 1 set");
+        assertTrue(file.entities().isPresent() && !file.entities().get().isEmpty(),
+            "entities.msf must have at least one entity");
+        assertTrue(file.blockEntities().isPresent() && !file.blockEntities().get().isEmpty(),
+            "entities.msf must have at least one block entity");
+        assertEquals("minecraft:armor_stand", file.entities().get().get(0).entityType());
+        assertEquals("minecraft:chest", file.blockEntities().get().get(0).blockEntityType());
     }
 }
