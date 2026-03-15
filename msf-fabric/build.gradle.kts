@@ -10,8 +10,11 @@ dependencies {
     modImplementation("net.fabricmc:fabric-loader:${libs.versions.fabricLoader.get()}")
     modImplementation("net.fabricmc.fabric-api:fabric-api:${libs.versions.fabricApi.get()}")
 
-    // msf-core is bundled into the output jar (no Minecraft dependency)
+    // msf-core and its runtime compression dependencies bundled as Jar-in-Jar
     include(implementation(project(":msf-core"))!!)
+    include("com.github.luben:zstd-jni:1.5.5-11")
+    include("org.lz4:lz4-java:1.8.0")
+    include("org.brotli:dec:0.1.2")
 }
 
 // Testmod source set — compiled against main sources + Minecraft
@@ -51,6 +54,13 @@ dependencies {
 
 tasks.withType<Test>().configureEach {
     useJUnitPlatform()
+}
+
+tasks.processResources {
+    inputs.property("version", project.version)
+    filesMatching("fabric.mod.json") {
+        expand("version" to project.version)
+    }
 }
 
 publishing {
