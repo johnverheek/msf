@@ -66,8 +66,14 @@ public final class EntityBridge {
         NbtWriteView writeView = NbtWriteView.create(ErrorReporter.EMPTY);
         entity.writeData(writeView);
         NbtCompound nbt = writeView.getNbt();
-        // Section 8.2 — id tag MUST NOT appear in stored payload
+        // Section 8.2 — id tag MUST NOT appear in stored payload (type is in the typed field)
         nbt.remove("id");
+        // Section 8.1 — position and rotation are stored in the typed f64/f32 fields, not the
+        // NBT payload. Strip "Pos" and "Rotation" so that readData() in toEntity() cannot
+        // restore the original extraction-time world coordinates and override setPosition().
+        // TODO(spec): Section 8.1 should document entity Pos as anchor-relative (spec gate item).
+        nbt.remove("Pos");
+        nbt.remove("Rotation");
 
         byte[] rawBytes = nbtToBytes(nbt);
         // Section 8.2 — strip UUID tags via UuidStripper
