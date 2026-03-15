@@ -1,52 +1,56 @@
-# Studio State — MSF
+# Studio State
 
-## Current Phase
-Verification — Session 14 complete. Owner manual verification required before release phase.
+## Project
+MSF (Minecraft Structured Format)
+Repo: https://github.com/johnverheek/msf
 
-## Version Target
-v1.0.0 (internal release — no external publishing until owner triggers publishing gate)
+## Current Version
+v1.0.0 — In progress (pre-release)
 
-## Spec Status
-V1.0 — published (DRAFT marker removed). No open issues.
+## Spec
+Revision: V1_N
+Status: Stable — no open 🔴 issues. No spec gate required for v1.0.0.
 
-## Implementation Status
-Session 14 complete. All coding sessions done for v1.0.0.
+## Implementation
+Sessions completed: 1–13
+Last session: Session 13 — entity & block entity bridge, canonical test vectors
+Test count: msf-core 201+ | msf-cli 35 | msf-fabric 41 gametests
 
-### Test Counts
-- msf-core: 211 tests
-- msf-cli: 35 tests
-- msf-fabric (standard): 0 (logic lives in msf-core; fabric module tested via gametests)
-- msf-fabric (gametests): 37 (require live Minecraft server, run via ./gradlew :msf-fabric:runGametest)
-- Total: 246 standard + 37 gametest = 283
+## Active Branch
+feature/v1.0.0-entity-bridge
 
-### Sessions 13–14 Deliverables
-- .github/workflows/ci.yml — CI pipeline
-- Version strings finalized (single-source 1.0.0)
-- CLI fat jar (msf-cli-1.0.0.jar)
-- README.md — full rewrite
-- CHANGELOG.md — v1.0.0 entry
-- Spec cleanup — DRAFT marker removed
-- Clean build verified — 246 tests pass, no disabled tests, deprecated API fixed
-- Implementation gate produced
+## Next Action
+Merge feature/v1.0.0-entity-bridge → develop, then release phase (app-release skill)
+Gate: docs/gates/v1.0.0/IMPLEMENTATION_GATE.md (complete)
 
-## What's Next
-1. **Owner: manual verification (Stories 3.2, 3.3)**
-   - Story 3.2: End-to-end round trip against Minecraft 1.21.1 with Fabric
-   - Story 3.3: Conversion path verification
-   - Commit results as verification log
-2. **Owner: GitHub branch protection** — require CI status check on develop and main
-3. **Release phase (app-release skill)** — after verification passes
+## v1.0.0 Release Scope
 
-## Gate Documents
-| Gate | Path | Status |
-|------|------|--------|
-| Planning | docs/gates/v1.0.0/PLANNING_GATE.md | Approved |
-| Implementation | docs/gates/v1.0.0/IMPLEMENTATION_GATE.md | Complete |
-| Release | — | Blocked on owner verification |
-| Publishing | — | Deferred until owner triggers |
+### Session 13 ✅ Complete
+- RegionExtractor.extractEntities() / extractBlockEntities() wired in executeExtract
+- MsfWriter.writeFile(MsfFile, CompressionType, Consumer) overload added
+- Canonical test vectors committed: minimal, zstd, lz4, brotli, entities
+- 5 canonical vector validation tests in MsfReferenceFileTest
+- 4 new gametests: armor stand round-trip, chest round-trip, feature flags, no-entity place
 
-## Branch
-Work: develop
+### code-release task (after Session 13)
+- GitHub Actions: Maven Central publish for msf-core on tag push
+- GitHub Actions: Modrinth + CurseForge publish for msf-fabric on tag push
+- GitHub Release: msf-cli fat-jar attached as release asset
+- README badges: Maven Central, Modrinth, CurseForge
 
-## Repo
-https://github.com/johnverheek/msf
+### app-documentation task (parallel with code-release)
+- README benchmark table: .msf vs .litematic vs .nbt file sizes (3+ test cases)
+- README install section with /msf extract and /msf place usage examples
+
+## Deferred to v1.1.0
+- /msf list and /msf preview in-game commands
+- Layers support in /msf extract (multi-layer extraction)
+- .schem (MCEdit) and Sponge format conversion in msf-cli
+- Rotation and mirror flags in /msf place
+- Mod Menu integration
+
+## Deferred to v1.2.0+
+- NeoForge / Quilt multi-loader support (new msf-neoforge module)
+
+## Won't Fix
+- In-house NBT external library fallback — deliberate design decision for interface consistency

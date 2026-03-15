@@ -1,15 +1,23 @@
 package dev.msf.fabric.world;
 
 import dev.msf.core.MsfPaletteException;
+import dev.msf.core.model.MsfBlockEntity;
+import dev.msf.core.model.MsfEntity;
 import dev.msf.core.model.MsfPalette;
 import dev.msf.core.model.MsfRegion;
 import dev.msf.core.util.YzxOrder;
+import dev.msf.fabric.bridge.BlockEntityBridge;
 import dev.msf.fabric.bridge.BlockStateBridge;
+import dev.msf.fabric.bridge.EntityBridge;
 import net.minecraft.block.BlockState;
+import net.minecraft.block.entity.BlockEntity;
+import net.minecraft.entity.Entity;
+import net.minecraft.entity.player.PlayerEntity;
 import net.minecraft.registry.entry.RegistryEntry;
 import net.minecraft.server.world.ServerWorld;
 import net.minecraft.util.math.BlockBox;
 import net.minecraft.util.math.BlockPos;
+import net.minecraft.util.math.Box;
 import net.minecraft.world.biome.Biome;
 
 import java.util.ArrayList;
@@ -168,6 +176,77 @@ public final class RegionExtractor {
         } catch (PaletteOverflowException e) {
             throw new MsfPaletteException(e.getMessage());
         }
+    }
+
+    // =========================================================================
+    // Entity extraction (Section 8)
+    // =========================================================================
+
+    /**
+     * Extracts all non-player entities whose position falls within {@code bounds}
+     * and returns them as {@link MsfEntity} records (Section 8).
+     *
+     * <p>UUIDs are stripped from each entity's NBT payload, and the {@code id} tag
+     * is removed, as required by Section 8.2. Player entities are excluded.
+     *
+     * @param world     the source world
+     * @param bounds    the axis-aligned bounding box to search
+     * @param anchorPos the schematic anchor in world coordinates; entity positions are
+     *                  recorded relative to this point
+     * @return a mutable list of extracted entities (empty if none found)
+     */
+    public static List<MsfEntity> extractEntities(
+        ServerWorld world,
+        BlockBox bounds,
+        BlockPos anchorPos
+    ) {
+        // Expand the Box by 1 on the + side so the upper bounds are inclusive
+        Box searchBox = new Box(
+            bounds.getMinX(), bounds.getMinY(), bounds.getMinZ(),
+            bounds.getMaxX() + 1, bounds.getMaxY() + 1, bounds.getMaxZ() + 1
+        );
+        List<MsfEntity> result = new ArrayList<>();
+        for (Entity entity : world.getEntitiesByClass(Entity.class, searchBox,
+                e -> !(e instanceof PlayerEntity))) {
+            result.add(EntityBridge.fromEntity(entity, anchorPos));
+        }
+        return result;
+    }
+
+    // =========================================================================
+    // Block entity extraction (Section 9)
+    // =========================================================================
+
+    /**
+     * Extracts all block entities whose position falls within {@code bounds}
+     * and returns them as {@link MsfBlockEntity} records (Section 9).
+     *
+     * <p>Positions are stored as offsets relative to {@code anchorPos}. UUID tags
+     * and the {@code id}, {@code x}, {@code y}, {@code z} tags are removed from each
+     * payload per Section 9.2.
+     *
+     * @param world     the source world
+     * @param bounds    the axis-aligned bounding box to search
+     * @param anchorPos the schematic anchor in world coordinates
+     * @return a mutable list of extracted block entities (empty if none found)
+     */
+    public static List<MsfBlockEntity> extractBlockEntities(
+        ServerWorld world,
+        BlockBox bounds,
+        BlockPos anchorPos
+    ) {
+        List<MsfBlockEntity> result = new ArrayList<>();
+        for (int bx = bounds.getMinX(); bx <= bounds.getMaxX(); bx++) {
+            for (int by = bounds.getMinY(); by <= bounds.getMaxY(); by++) {
+                for (int bz = bounds.getMinZ(); bz <= bounds.getMaxZ(); bz++) {
+                    BlockEntity be = world.getBlockEntity(new BlockPos(bx, by, bz));
+                    if (be != null) {
+                        result.add(BlockEntityBridge.fromBlockEntity(be, anchorPos));
+                    }
+                }
+            }
+        }
+        return result;
     }
 
     // =========================================================================

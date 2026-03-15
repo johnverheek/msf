@@ -8,6 +8,8 @@ import dev.msf.core.MsfPaletteException;
 import dev.msf.core.io.MsfReader;
 import dev.msf.core.io.MsfReaderConfig;
 import dev.msf.core.io.MsfWriter;
+import dev.msf.core.model.MsfBlockEntity;
+import dev.msf.core.model.MsfEntity;
 import dev.msf.core.model.MsfFile;
 import dev.msf.core.model.MsfLayer;
 import dev.msf.core.model.MsfLayerIndex;
@@ -181,8 +183,12 @@ public final class MsfCommands {
             return 0;
         }
 
+        // Capture entities and block entities within the bounds (Section 8, Section 9)
+        List<MsfEntity> entities = RegionExtractor.extractEntities(world, bounds, anchor);
+        List<MsfBlockEntity> blockEntities = RegionExtractor.extractBlockEntities(world, bounds, anchor);
+
         try {
-            MsfFile file = MsfFile.builder()
+            MsfFile.Builder fileBuilder = MsfFile.builder()
                 .mcDataVersion(SharedConstants.getGameVersion().getSaveVersion().getId())
                 .metadata(MsfMetadata.builder()
                     .name(outputPath.getFileName().toString())
@@ -193,9 +199,16 @@ public final class MsfCommands {
                 .palette(MsfPalette.of(new ArrayList<>(palette)))
                 .layerIndex(MsfLayerIndex.of(List.of(
                     MsfLayer.builder().layerId(1).name("layer").addRegion(region).build()
-                )))
-                .build();
-            Files.write(outputPath, MsfWriter.writeFile(file, null));
+                )));
+            // Only set entity/block-entity blocks when content was found;
+            // absent blocks leave feature flag bits 0 and 1 clear (spec Section 3.3)
+            if (!entities.isEmpty()) {
+                fileBuilder.entities(entities);
+            }
+            if (!blockEntities.isEmpty()) {
+                fileBuilder.blockEntities(blockEntities);
+            }
+            Files.write(outputPath, MsfWriter.writeFile(fileBuilder.build(), null));
         } catch (MsfException | IOException e) {
             feedback.accept(Text.literal("Error writing MSF file: " + e.getMessage()));
             return 0;
