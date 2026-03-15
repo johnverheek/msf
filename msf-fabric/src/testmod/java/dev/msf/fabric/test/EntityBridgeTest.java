@@ -115,25 +115,36 @@ public class EntityBridgeTest implements FabricGameTest {
     public void toEntityUsesPlacementAnchorNotExtractionAnchor(TestContext ctx) throws MsfParseException {
         ServerWorld world = ctx.getWorld();
 
-        // Extraction: entity is 2.5 blocks east and 1 block above the extraction anchor
-        BlockPos extractionAnchor = ctx.getAbsolutePos(BlockPos.ORIGIN);
-        double entityWorldX = extractionAnchor.getX() + 2.5;
+        // Extraction anchor is at a NON-ORIGIN offset so that (entity - anchor) is a
+        // genuine subtraction with a non-trivial anchor value. If anchor were (0,0,0)
+        // the relative position would equal the entity's absolute world position and
+        // the test would not distinguish correct from incorrect anchor-relative math.
+        BlockPos extractionAnchor = ctx.getAbsolutePos(new BlockPos(2, 0, 2));
+
+        // Entity is 3.5 blocks east and 1 block above the extraction anchor in world space.
+        double entityWorldX = extractionAnchor.getX() + 3.5;
         double entityWorldY = extractionAnchor.getY() + 1.0;
         double entityWorldZ = extractionAnchor.getZ() + 0.5;
 
         ArmorStandEntity stand = spawnArmorStand(world, entityWorldX, entityWorldY, entityWorldZ);
         MsfEntity msfEntity = EntityBridge.fromEntity(stand, extractionAnchor);
 
-        // Verify the relative offsets stored in the MsfEntity
-        double relX = entityWorldX - extractionAnchor.getX(); // 2.5
-        double relY = entityWorldY - extractionAnchor.getY(); // 1.0
-        double relZ = entityWorldZ - extractionAnchor.getZ(); // 0.5
+        // Relative offsets must be (3.5, 1.0, 0.5) — NOT the entity's absolute world coords.
+        double relX = 3.5;
+        double relY = 1.0;
+        double relZ = 0.5;
         ctx.assertTrue(Math.abs(msfEntity.positionX() - relX) < 0.001,
-            "relX mismatch during extraction: expected " + relX + ", got " + msfEntity.positionX());
+            "relX mismatch: expected " + relX + " got " + msfEntity.positionX()
+            + " (extractionAnchor.X=" + extractionAnchor.getX() + ", entityWorld.X=" + entityWorldX + ")");
+        ctx.assertTrue(Math.abs(msfEntity.positionY() - relY) < 0.001,
+            "relY mismatch: expected " + relY + " got " + msfEntity.positionY());
+        ctx.assertTrue(Math.abs(msfEntity.positionZ() - relZ) < 0.001,
+            "relZ mismatch: expected " + relZ + " got " + msfEntity.positionZ());
 
-        // Placement: use a completely different anchor — entity must appear at
-        // placementAnchor + relative offset, NOT at the original extraction world position.
-        BlockPos placementAnchor = ctx.getAbsolutePos(new BlockPos(5, 0, 5));
+        // Placement anchor is far from both the test origin and the extraction anchor.
+        // Entity must appear at placementAnchor + (3.5, 1.0, 0.5), NOT near the original
+        // extraction world position (entityWorldX, entityWorldY, entityWorldZ).
+        BlockPos placementAnchor = ctx.getAbsolutePos(new BlockPos(15, 0, 15));
         Entity rebuilt = EntityBridge.toEntity(msfEntity, world, placementAnchor);
 
         double expectedX = placementAnchor.getX() + relX;
@@ -141,14 +152,15 @@ public class EntityBridgeTest implements FabricGameTest {
         double expectedZ = placementAnchor.getZ() + relZ;
 
         ctx.assertTrue(Math.abs(rebuilt.getX() - expectedX) < 0.001,
-            "Placed entity X should be placementAnchor+relX=" + expectedX
-            + " (not extraction pos " + entityWorldX + "), got " + rebuilt.getX());
+            "Placed entity X: expected placementAnchor.X+" + relX + "=" + expectedX
+            + " but got " + rebuilt.getX()
+            + " (original extraction world X was " + entityWorldX + ")");
         ctx.assertTrue(Math.abs(rebuilt.getY() - expectedY) < 0.001,
-            "Placed entity Y should be placementAnchor+relY=" + expectedY
-            + " (not extraction pos " + entityWorldY + "), got " + rebuilt.getY());
+            "Placed entity Y: expected " + expectedY + " but got " + rebuilt.getY());
         ctx.assertTrue(Math.abs(rebuilt.getZ() - expectedZ) < 0.001,
-            "Placed entity Z should be placementAnchor+relZ=" + expectedZ
-            + " (not extraction pos " + entityWorldZ + "), got " + rebuilt.getZ());
+            "Placed entity Z: expected placementAnchor.Z+" + relZ + "=" + expectedZ
+            + " but got " + rebuilt.getZ()
+            + " (original extraction world Z was " + entityWorldZ + ")");
         ctx.complete();
     }
 
