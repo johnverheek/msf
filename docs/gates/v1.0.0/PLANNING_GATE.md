@@ -2,8 +2,16 @@
 Track: Minor
 Branch: feature/v1.0.0-entity-bridge
 
+## Platform Target
+Minecraft: 1.21.11
+Fabric API: 0.141.3+1.21.11
+Fabric Loader: 0.18.4
+Artifact suffix: +1.21.11
+
+Note: Original development targeted 1.21.1. Target updated to 1.21.11 — the final version of the pre-26.1 release scheme and the correct community stable target for v1.0.0. 26.1 support is deferred to v1.1.0. No spec changes required for this target change — msf-core is pure Java with zero Minecraft dependency and requires no modification.
+
 ## What This Release Is
-v1.0.0 is the first public release of MSF. It completes the implementation gap between the V1_N specification and what the reference implementation actually delivers: entity and block entity support in msf-fabric. Without this, builders who extract structures containing armor stands, item frames, or containers lose that content silently — unacceptable for a v1.0.0 claim given that Sections 8 and 9 of the spec are fully written and stable. This release also ships the publishing infrastructure that makes the project discoverable (Maven Central for msf-core, Modrinth and CurseForge for msf-fabric), canonical test vectors for third-party implementors, and a README benchmark table that demonstrates the format's concrete file-size advantage.
+v1.0.0 is the first public release of MSF. It completes the implementation gap between the V1_N specification and what the reference implementation actually delivers: entity and block entity support in msf-fabric. Without this, builders who extract structures containing armor stands, item frames, or containers lose that content silently — unacceptable for a v1.0.0 claim given that Sections 8 and 9 of the spec are fully written and stable. This release also ships the publishing infrastructure that makes the project discoverable (Maven Central for msf-core, Modrinth and CurseForge for msf-fabric), canonical test vectors for third-party implementors, and a README benchmark table that demonstrates the format's concrete file-size advantage. msf-fabric targets Minecraft 1.21.11, the final version of the pre-26.1 release scheme.
 
 ## Semver Rationale
 Minor bump because all changes are additive — new capability in msf-fabric with no changes to existing APIs, binary format, or existing behavior.
@@ -13,16 +21,18 @@ Breaking: No
 
 ## Scope
 In:
-- Entity extraction and placement in msf-fabric (RegionExtractor, RegionPlacer, EntityBridge, BlockEntityBridge)
-- Feature flag bits 0 and 1 wired end-to-end through extract and place commands
-- Canonical test vectors in test/resources (one per compression type + one with entities and block entities)
+- Port msf-fabric from Minecraft 1.21.1 to 1.21.11 — update deps, fix mapping renames, verify build
+- Entity extraction and placement in msf-fabric (RegionExtractor, RegionPlacer, EntityBridge, BlockEntityBridge) — delivered in commit 1fb89dd, verified complete
+- Feature flag bits 0 and 1 wired end-to-end through extract and place commands — delivered
+- Canonical test vectors in test/resources (one per compression type + one with entities and block entities) — delivered
 - Maven Central publication for msf-core (dev.msf:msf-core:1.0.0)
-- Modrinth and CurseForge publication for msf-fabric
+- Modrinth and CurseForge publication for msf-fabric (1.0.0+1.21.11)
 - GitHub Release with msf-cli fat-jar attached
 - README benchmark table (file size vs .litematic and .nbt)
 - README install section with /msf extract usage
 
 Out:
+- Minecraft 26.1 support (v1.1.0 — after ecosystem stabilises)
 - /msf list and /msf preview in-game commands (v1.1.0)
 - Layers support in /msf extract — multi-layer extraction (v1.1.0)
 - .schem (MCEdit) and Sponge format conversion in msf-cli (v1.1.0)
@@ -255,7 +265,9 @@ Acceptance Criteria:
 
 ## Session Plan
 
-Session 13 (code-mc-implementation): Epic 1 — EntityBridge, BlockEntityBridge, RegionExtractor and RegionPlacer extensions for entities and block entities, feature flag bit wiring in /msf extract and /msf place, round-trip tests. Epic 2 — canonical test vectors generated and validated in the same session.
+Session 13 (code-mc-implementation): Epic 1 — EntityBridge, BlockEntityBridge, RegionExtractor and RegionPlacer extensions for entities and block entities, feature flag bit wiring in /msf extract and /msf place, round-trip tests. Epic 2 — canonical test vectors generated and validated in the same session. COMPLETE as of commit 1fb89dd.
+
+Session 13b (code-mc-implementation): Port msf-fabric from 1.21.1 to 1.21.11 — update libs.versions.toml (Fabric API 0.141.3+1.21.11, Yarn mappings 1.21.11+build.X, Fabric Loader 0.18.4), update fabric.mod.json version suffix to +1.21.11, fix all mapping renames in bridge and command classes, verify clean build and passing test suite. Owner runs in-game RTM on 1.21.11 after this session.
 
 code-release task: Epic 3 — GitHub Actions workflow for Maven Central, Modrinth, CurseForge, and GitHub Release. README badges. This is a separate task for the code-release skill after Session 13 produces a passing build.
 

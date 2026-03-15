@@ -12,25 +12,30 @@ Revision: V1_N
 Status: Stable — no open 🔴 issues. No spec gate required for v1.0.0.
 
 ## Implementation
-Sessions completed: 1–13
-Last session: Session 13 — entity & block entity bridge, canonical test vectors
-Test count: msf-core 201+ | msf-cli 35 | msf-fabric 41 gametests
+Sessions completed: 1–12
+Last session: Session 12 — in-game /msf extract and /msf place commands, round-trip validation
+Test count: 269+
 
 ## Active Branch
 feature/v1.0.0-entity-bridge
 
 ## Next Action
-Merge feature/v1.0.0-entity-bridge → develop, then release phase (app-release skill)
-Gate: docs/gates/v1.0.0/IMPLEMENTATION_GATE.md (complete)
+Session 13b: Port msf-fabric 1.21.1 → 1.21.11
+Skill: code-mc-implementation
+Gate: docs/gates/v1.0.0/PLANNING_GATE.md
 
 ## v1.0.0 Release Scope
 
-### Session 13 ✅ Complete
-- RegionExtractor.extractEntities() / extractBlockEntities() wired in executeExtract
-- MsfWriter.writeFile(MsfFile, CompressionType, Consumer) overload added
-- Canonical test vectors committed: minimal, zstd, lz4, brotli, entities
-- 5 canonical vector validation tests in MsfReferenceFileTest
-- 4 new gametests: armor stand round-trip, chest round-trip, feature flags, no-entity place
+### Completed
+- Session 13: EntityBridge, BlockEntityBridge, RegionExtractor/RegionPlacer entity+block entity support, feature flags, round-trip gametests, canonical test vectors (commit 1fb89dd)
+- CI/CD: release.yml with 4-job workflow, credential-absent skip behavior, Maven Central POM, signing
+
+### Session 13b (code-mc-implementation) — next
+- Port msf-fabric from Minecraft 1.21.1 to 1.21.11
+- Target: Fabric API 0.141.3+1.21.11, Fabric Loader 0.18.4
+- Fix mapping renames in bridge and command classes (crash confirmed at MsfCommands.java:186)
+- Update fabric.mod.json suffix to +1.21.11
+- Owner runs in-game RTM on 1.21.11 after this session
 
 ### code-release task (after Session 13)
 - GitHub Actions: Maven Central publish for msf-core on tag push
