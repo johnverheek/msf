@@ -49,17 +49,21 @@ dependencies {
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
 }
 
+tasks.withType<Test>().configureEach {
+    useJUnitPlatform()
+}
+
 publishing {
     publications {
         create<MavenPublication>("mavenJava") {
             from(components["java"])
             groupId = "dev.msf"
             artifactId = "msf-fabric"
-            version = "${project.version}+1.21.1"
+            version = "${project.version}+1.21.11"
             pom {
                 name.set("MSF Fabric")
                 description.set("Fabric bridge for the MSF (Minecraft Structured Format) schematic format")
-                url.set("https://github.com/jverheek/msf")
+                url.set("https://github.com/johnverheek/msf")
                 licenses {
                     license {
                         name.set("MIT License")

@@ -189,7 +189,7 @@ public final class MsfCommands {
 
         try {
             MsfFile.Builder fileBuilder = MsfFile.builder()
-                .mcDataVersion(SharedConstants.getGameVersion().getSaveVersion().getId())
+                .mcDataVersion(SharedConstants.getGameVersion().dataVersion().id())
                 .metadata(MsfMetadata.builder()
                     .name(outputPath.getFileName().toString())
                     .canonicalFacing(facing.msfValue())
