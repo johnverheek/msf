@@ -12,12 +12,12 @@ Breaking: No
 ## Artifacts
 | Artifact | Target | Status |
 |----------|--------|--------|
-| msf-core-1.0.0.jar | Maven Central (dev.msf:msf-core:1.0.0) | Pending CI/CD |
-| msf-core-1.0.0-sources.jar | Maven Central | Pending CI/CD |
-| msf-core-1.0.0-javadoc.jar | Maven Central | Pending CI/CD |
-| msf-fabric-1.0.0+1.21.1.jar | Modrinth | Pending CI/CD |
-| msf-fabric-1.0.0+1.21.1.jar | CurseForge | Pending CI/CD |
-| msf-cli-1.0.0.jar | GitHub Release (fat-jar) | Pending CI/CD |
+| msf-core-1.0.0.jar | Maven Central (dev.msf:msf-core:1.0.0) | CI/CD configured — awaiting MAVEN_USERNAME/MAVEN_PASSWORD secrets |
+| msf-core-1.0.0-sources.jar | Maven Central | CI/CD configured — awaiting secrets |
+| msf-core-1.0.0-javadoc.jar | Maven Central | CI/CD configured — awaiting secrets |
+| msf-fabric-1.0.0+1.21.1.jar | Modrinth | CI/CD configured — awaiting MODRINTH_TOKEN + mod page ID |
+| msf-fabric-1.0.0+1.21.1.jar | CurseForge | CI/CD configured — awaiting CURSEFORGE_TOKEN + mod page ID |
+| msf-cli-1.0.0.jar | GitHub Release (fat-jar) | CI/CD configured — draft release on tag push |
 
 ## Checklist
 - [x] All P0 stories delivered (entity extraction, block entity extraction, feature flags wired, test vectors)
@@ -33,9 +33,9 @@ Breaking: No
 - [x] Developer changelog complete
 - [x] Player changelog drafted
 - [x] Spec changelog note drafted (no normative changes)
-- [ ] CI/CD pipeline configured — **pending code-release handoff**
-- [ ] Modrinth and CurseForge release pages configured — **pending code-release and app-documentation**
-- [ ] Release branch created: release/v1.0.0
+- [x] CI/CD pipeline configured — `.github/workflows/release.yml`; publish jobs skip gracefully when secrets absent; draft GitHub Release on tag push
+- [ ] Modrinth and CurseForge release pages configured — replace PLACEHOLDER IDs in release.yml before adding tokens
+- [x] Release branch created: release/v1.0.0
 - [ ] Owner approval
 - [ ] Publishing decision: Published / Staged / Deferred
 
