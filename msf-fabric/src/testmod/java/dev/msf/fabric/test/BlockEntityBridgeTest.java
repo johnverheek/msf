@@ -3,7 +3,6 @@ package dev.msf.fabric.test;
 import dev.msf.core.MsfParseException;
 import dev.msf.core.model.MsfBlockEntity;
 import dev.msf.fabric.bridge.BlockEntityBridge;
-import net.fabricmc.fabric.api.gametest.v1.FabricGameTest;
 import net.minecraft.block.Blocks;
 import net.minecraft.block.entity.BlockEntity;
 import net.minecraft.block.entity.ChestBlockEntity;
@@ -12,7 +11,7 @@ import net.minecraft.item.Items;
 import net.minecraft.nbt.NbtCompound;
 import net.minecraft.nbt.NbtIo;
 import net.minecraft.nbt.NbtSizeTracker;
-import net.minecraft.test.GameTest;
+import net.fabricmc.fabric.api.gametest.v1.GameTest;
 import net.minecraft.test.TestContext;
 import net.minecraft.util.math.BlockPos;
 
@@ -23,9 +22,9 @@ import java.io.IOException;
 /**
  * Gametests for {@link BlockEntityBridge} — NBT extraction and application.
  */
-public class BlockEntityBridgeTest implements FabricGameTest {
+public class BlockEntityBridgeTest {
 
-    @GameTest(templateName = EMPTY_STRUCTURE)
+    @GameTest(structure = "fabric-gametest-api-v1:empty")
     public void fromBlockEntityCapturesType(TestContext ctx) {
         ctx.setBlockState(1, 1, 1, Blocks.CHEST.getDefaultState());
 
@@ -41,7 +40,7 @@ public class BlockEntityBridgeTest implements FabricGameTest {
         ctx.complete();
     }
 
-    @GameTest(templateName = EMPTY_STRUCTURE)
+    @GameTest(structure = "fabric-gametest-api-v1:empty")
     public void fromBlockEntityRecordsRelativePosition(TestContext ctx) {
         ctx.setBlockState(2, 1, 3, Blocks.CHEST.getDefaultState());
 
@@ -58,7 +57,7 @@ public class BlockEntityBridgeTest implements FabricGameTest {
         ctx.complete();
     }
 
-    @GameTest(templateName = EMPTY_STRUCTURE)
+    @GameTest(structure = "fabric-gametest-api-v1:empty")
     public void applyToWorldSilentlySkipsNullBlockEntity(TestContext ctx) throws MsfParseException {
         // Position has no block entity placed — applyToWorld must not throw
         BlockPos worldPos = ctx.getAbsolutePos(new BlockPos(1, 1, 1));
@@ -73,7 +72,7 @@ public class BlockEntityBridgeTest implements FabricGameTest {
         ctx.complete();
     }
 
-    @GameTest(templateName = EMPTY_STRUCTURE)
+    @GameTest(structure = "fabric-gametest-api-v1:empty")
     public void applyEmptyPayloadIsNoOp(TestContext ctx) throws MsfParseException {
         ctx.setBlockState(1, 1, 1, Blocks.CHEST.getDefaultState());
 
@@ -89,7 +88,7 @@ public class BlockEntityBridgeTest implements FabricGameTest {
         ctx.complete();
     }
 
-    @GameTest(templateName = EMPTY_STRUCTURE)
+    @GameTest(structure = "fabric-gametest-api-v1:empty")
     public void extractAndApplyRoundTrip(TestContext ctx) throws MsfParseException {
         // Place source chest
         ctx.setBlockState(1, 1, 1, Blocks.CHEST.getDefaultState());
@@ -124,7 +123,7 @@ public class BlockEntityBridgeTest implements FabricGameTest {
     // NBT field verification tests
     // =========================================================================
 
-    @GameTest(templateName = EMPTY_STRUCTURE)
+    @GameTest(structure = "fabric-gametest-api-v1:empty")
     public void extractOmitsIdXYZFromPayload(TestContext ctx) throws IOException {
         ctx.setBlockState(1, 1, 1, Blocks.CHEST.getDefaultState());
 
@@ -149,7 +148,7 @@ public class BlockEntityBridgeTest implements FabricGameTest {
         ctx.complete();
     }
 
-    @GameTest(templateName = EMPTY_STRUCTURE)
+    @GameTest(structure = "fabric-gametest-api-v1:empty")
     public void chestInventoryRoundTrip(TestContext ctx) throws MsfParseException {
         // Place source chest at (1,1,1) and target chest at (3,1,1)
         ctx.setBlockState(1, 1, 1, Blocks.CHEST.getDefaultState());

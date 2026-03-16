@@ -3,10 +3,9 @@ package dev.msf.fabric.test;
 import dev.msf.core.MsfPaletteException;
 import dev.msf.core.model.MsfPalette;
 import dev.msf.fabric.bridge.BlockStateBridge;
-import net.fabricmc.fabric.api.gametest.v1.FabricGameTest;
 import net.minecraft.block.BlockState;
 import net.minecraft.block.Blocks;
-import net.minecraft.test.GameTest;
+import net.fabricmc.fabric.api.gametest.v1.GameTest;
 import net.minecraft.test.TestContext;
 
 /**
@@ -14,16 +13,16 @@ import net.minecraft.test.TestContext;
  *
  * <p>No world blocks are used; the tests run against the registry directly.
  */
-public class BlockStateBridgeTest implements FabricGameTest {
+public class BlockStateBridgeTest {
 
-    @GameTest(templateName = EMPTY_STRUCTURE)
+    @GameTest(structure = "fabric-gametest-api-v1:empty")
     public void stoneNoProperties(TestContext ctx) {
         String s = BlockStateBridge.toString(Blocks.STONE.getDefaultState());
         ctx.assertTrue("minecraft:stone".equals(s), "Expected minecraft:stone, got " + s);
         ctx.complete();
     }
 
-    @GameTest(templateName = EMPTY_STRUCTURE)
+    @GameTest(structure = "fabric-gametest-api-v1:empty")
     public void airRoundTrip(TestContext ctx) throws MsfPaletteException {
         BlockState state = BlockStateBridge.fromString(MsfPalette.AIR);
         String s = BlockStateBridge.toString(state);
@@ -31,7 +30,7 @@ public class BlockStateBridgeTest implements FabricGameTest {
         ctx.complete();
     }
 
-    @GameTest(templateName = EMPTY_STRUCTURE)
+    @GameTest(structure = "fabric-gametest-api-v1:empty")
     public void stairsRoundTrip(TestContext ctx) throws MsfPaletteException {
         String input = "minecraft:oak_stairs[facing=north,half=bottom,shape=straight,waterlogged=false]";
         BlockState state = BlockStateBridge.fromString(input);
@@ -40,7 +39,7 @@ public class BlockStateBridgeTest implements FabricGameTest {
         ctx.complete();
     }
 
-    @GameTest(templateName = EMPTY_STRUCTURE)
+    @GameTest(structure = "fabric-gametest-api-v1:empty")
     public void unknownBlockThrows(TestContext ctx) {
         try {
             BlockStateBridge.fromString("minecraft:no_such_block_exists_at_all");
@@ -50,7 +49,7 @@ public class BlockStateBridgeTest implements FabricGameTest {
         }
     }
 
-    @GameTest(templateName = EMPTY_STRUCTURE)
+    @GameTest(structure = "fabric-gametest-api-v1:empty")
     public void invalidPropertyThrows(TestContext ctx) {
         try {
             // stone has no properties
@@ -61,7 +60,7 @@ public class BlockStateBridgeTest implements FabricGameTest {
         }
     }
 
-    @GameTest(templateName = EMPTY_STRUCTURE)
+    @GameTest(structure = "fabric-gametest-api-v1:empty")
     public void logAllSixPropertiesRoundTrip(TestContext ctx) throws MsfPaletteException {
         // oak_log[axis=y] — 1 property
         String input = "minecraft:oak_log[axis=y]";

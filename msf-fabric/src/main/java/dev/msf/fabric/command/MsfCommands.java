@@ -1,8 +1,8 @@
 package dev.msf.fabric.command;
 
 import com.mojang.brigadier.CommandDispatcher;
-import com.mojang.brigadier.arguments.IntegerArgumentType;
 import com.mojang.brigadier.arguments.StringArgumentType;
+import net.minecraft.command.argument.BlockPosArgumentType;
 import dev.msf.core.MsfException;
 import dev.msf.core.MsfPaletteException;
 import dev.msf.core.io.MsfReader;
@@ -43,14 +43,16 @@ import java.util.function.Consumer;
  *
  * <h2>Commands</h2>
  * <ul>
- *   <li>{@code /msf extract <x1> <y1> <z1> <x2> <y2> <z2> <filename>} — extracts the
- *       bounding box {@code (x1,y1,z1)–(x2,y2,z2)} as an MSF schematic and writes it
- *       to {@code msf-schematics/<filename>.msf}. The canonical facing is derived from
- *       the executing player's horizontal facing direction.</li>
- *   <li>{@code /msf place <filename> <x> <y> <z>} — reads
- *       {@code msf-schematics/<filename>.msf} and places it at world position
- *       {@code (x,y,z)} as the anchor. The target facing is the player's current
- *       horizontal facing; the canonical facing is read from the file's metadata.</li>
+ *   <li>{@code /msf extract <pos1> <pos2> <filename>} — extracts the bounding box
+ *       {@code pos1–pos2} as an MSF schematic and writes it to
+ *       {@code msf-schematics/<filename>.msf}. Positions accept absolute coordinates,
+ *       relative ({@code ~}) notation, and local ({@code ^}) notation. The canonical
+ *       facing is derived from the executing player's horizontal facing direction.</li>
+ *   <li>{@code /msf place <filename> <pos>} — reads
+ *       {@code msf-schematics/<filename>.msf} and places it with {@code pos} as the
+ *       anchor. Accepts absolute, relative, and local coordinate notation. The target
+ *       facing is the player's current horizontal facing; the canonical facing is read
+ *       from the file's metadata.</li>
  * </ul>
  *
  * <h2>Output directory</h2>
@@ -82,27 +84,16 @@ public final class MsfCommands {
 
     private static com.mojang.brigadier.builder.LiteralArgumentBuilder<ServerCommandSource> buildExtractCommand() {
         return CommandManager.literal("extract")
-            .then(CommandManager.argument("x1", IntegerArgumentType.integer())
-            .then(CommandManager.argument("y1", IntegerArgumentType.integer())
-            .then(CommandManager.argument("z1", IntegerArgumentType.integer())
-            .then(CommandManager.argument("x2", IntegerArgumentType.integer())
-            .then(CommandManager.argument("y2", IntegerArgumentType.integer())
-            .then(CommandManager.argument("z2", IntegerArgumentType.integer())
+            .then(CommandManager.argument("pos1", BlockPosArgumentType.blockPos())
+            .then(CommandManager.argument("pos2", BlockPosArgumentType.blockPos())
             .then(CommandManager.argument("filename", StringArgumentType.word())
                 .executes(ctx -> {
-                    int x1 = IntegerArgumentType.getInteger(ctx, "x1");
-                    int y1 = IntegerArgumentType.getInteger(ctx, "y1");
-                    int z1 = IntegerArgumentType.getInteger(ctx, "z1");
-                    int x2 = IntegerArgumentType.getInteger(ctx, "x2");
-                    int y2 = IntegerArgumentType.getInteger(ctx, "y2");
-                    int z2 = IntegerArgumentType.getInteger(ctx, "z2");
+                    BlockPos pos1 = BlockPosArgumentType.getBlockPos(ctx, "pos1");
+                    BlockPos pos2 = BlockPosArgumentType.getBlockPos(ctx, "pos2");
                     String filename = StringArgumentType.getString(ctx, "filename");
 
                     ServerCommandSource source = ctx.getSource();
-                    BlockBox bounds = BlockBox.create(
-                        new BlockPos(x1, y1, z1),
-                        new BlockPos(x2, y2, z2)
-                    );
+                    BlockBox bounds = BlockBox.create(pos1, pos2);
                     Path outputPath = SCHEMATICS_DIR.resolve(filename + ".msf");
 
                     return executeExtract(
@@ -110,31 +101,27 @@ public final class MsfCommands {
                         msg -> source.sendFeedback(() -> msg, false)
                     );
                 })
-            )))))))
+            )))
         ;
     }
 
     private static com.mojang.brigadier.builder.LiteralArgumentBuilder<ServerCommandSource> buildPlaceCommand() {
         return CommandManager.literal("place")
             .then(CommandManager.argument("filename", StringArgumentType.word())
-            .then(CommandManager.argument("x", IntegerArgumentType.integer())
-            .then(CommandManager.argument("y", IntegerArgumentType.integer())
-            .then(CommandManager.argument("z", IntegerArgumentType.integer())
+            .then(CommandManager.argument("pos", BlockPosArgumentType.blockPos())
                 .executes(ctx -> {
                     String filename = StringArgumentType.getString(ctx, "filename");
-                    int x = IntegerArgumentType.getInteger(ctx, "x");
-                    int y = IntegerArgumentType.getInteger(ctx, "y");
-                    int z = IntegerArgumentType.getInteger(ctx, "z");
+                    BlockPos pos = BlockPosArgumentType.getBlockPos(ctx, "pos");
 
                     ServerCommandSource source = ctx.getSource();
                     Path inputPath = SCHEMATICS_DIR.resolve(filename + ".msf");
 
                     return executePlace(
-                        source.getWorld(), new BlockPos(x, y, z), facingFromSource(source),
+                        source.getWorld(), pos, facingFromSource(source),
                         inputPath, msg -> source.sendFeedback(() -> msg, false)
                     );
                 })
-            ))))
+            ))
         ;
     }
 

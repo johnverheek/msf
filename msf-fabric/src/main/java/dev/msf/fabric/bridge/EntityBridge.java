@@ -17,9 +17,6 @@ import net.minecraft.util.ErrorReporter;
 import net.minecraft.util.Identifier;
 import net.minecraft.util.math.BlockPos;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.DataInputStream;
@@ -41,9 +38,6 @@ import java.util.UUID;
  * A fresh UUID is assigned on every reconstruction.
  */
 public final class EntityBridge {
-
-    // TODO(debug): remove after confirming entity position bug is fixed
-    private static final Logger LOGGER = LoggerFactory.getLogger(EntityBridge.class);
 
     /** Maximum NBT payload size accepted during reconstruction (64 MB). */
     private static final long MAX_NBT_READ_BYTES = 67_108_864L;
@@ -77,7 +71,6 @@ public final class EntityBridge {
         // Section 8.1 — position and rotation are stored in the typed f64/f32 fields, not the
         // NBT payload. Strip "Pos" and "Rotation" so that readData() in toEntity() cannot
         // restore the original extraction-time world coordinates and override setPosition().
-        // TODO(spec): Section 8.1 should document entity Pos as anchor-relative (spec gate item).
         nbt.remove("Pos");
         nbt.remove("Rotation");
 
@@ -90,13 +83,6 @@ public final class EntityBridge {
         double relX = entity.getX() - anchorPos.getX();
         double relY = entity.getY() - anchorPos.getY();
         double relZ = entity.getZ() - anchorPos.getZ();
-
-        // TODO(debug): remove after confirming entity position bug is fixed
-        LOGGER.info("[MSF-DEBUG] fromEntity: type={} | anchor=({},{},{}) | entityWorld=({},{},{}) | rel=({},{},{})",
-            entityType,
-            anchorPos.getX(), anchorPos.getY(), anchorPos.getZ(),
-            entity.getX(), entity.getY(), entity.getZ(),
-            relX, relY, relZ);
 
         return MsfEntity.builder()
             .position(relX, relY, relZ)
@@ -155,13 +141,6 @@ public final class EntityBridge {
         double worldX = anchorPos.getX() + msfEntity.positionX();
         double worldY = anchorPos.getY() + msfEntity.positionY();
         double worldZ = anchorPos.getZ() + msfEntity.positionZ();
-
-        // TODO(debug): remove after confirming entity position bug is fixed
-        LOGGER.info("[MSF-DEBUG] toEntity: type={} | rel=({},{},{}) | placementAnchor=({},{},{}) | spawn=({},{},{})",
-            msfEntity.entityType(),
-            msfEntity.positionX(), msfEntity.positionY(), msfEntity.positionZ(),
-            anchorPos.getX(), anchorPos.getY(), anchorPos.getZ(),
-            worldX, worldY, worldZ);
 
         entity.setPosition(worldX, worldY, worldZ);
         entity.setYaw(msfEntity.yaw());

@@ -3,7 +3,6 @@ package dev.msf.fabric.test;
 import dev.msf.core.MsfParseException;
 import dev.msf.core.model.MsfEntity;
 import dev.msf.fabric.bridge.EntityBridge;
-import net.fabricmc.fabric.api.gametest.v1.FabricGameTest;
 import net.minecraft.entity.Entity;
 import net.minecraft.entity.EntityType;
 import net.minecraft.entity.SpawnReason;
@@ -13,7 +12,7 @@ import net.minecraft.nbt.NbtIo;
 import net.minecraft.nbt.NbtSizeTracker;
 import net.minecraft.registry.Registries;
 import net.minecraft.server.world.ServerWorld;
-import net.minecraft.test.GameTest;
+import net.fabricmc.fabric.api.gametest.v1.GameTest;
 import net.minecraft.test.TestContext;
 import net.minecraft.util.math.BlockPos;
 
@@ -24,7 +23,7 @@ import java.io.IOException;
 /**
  * Gametests for {@link EntityBridge} — NBT extraction and entity reconstruction.
  */
-public class EntityBridgeTest implements FabricGameTest {
+public class EntityBridgeTest {
 
     /** Spawns an armor stand at the given world position and returns it. */
     private static ArmorStandEntity spawnArmorStand(ServerWorld world, double x, double y, double z) {
@@ -35,7 +34,7 @@ public class EntityBridgeTest implements FabricGameTest {
         return stand;
     }
 
-    @GameTest(templateName = EMPTY_STRUCTURE)
+    @GameTest(structure = "fabric-gametest-api-v1:empty")
     public void fromEntityCapturesType(TestContext ctx) {
         BlockPos anchor   = ctx.getAbsolutePos(BlockPos.ORIGIN);
         BlockPos spawnPos = ctx.getAbsolutePos(new BlockPos(2, 1, 2));
@@ -50,7 +49,7 @@ public class EntityBridgeTest implements FabricGameTest {
         ctx.complete();
     }
 
-    @GameTest(templateName = EMPTY_STRUCTURE)
+    @GameTest(structure = "fabric-gametest-api-v1:empty")
     public void fromEntityRecordsRelativePosition(TestContext ctx) {
         BlockPos anchor   = ctx.getAbsolutePos(BlockPos.ORIGIN);
         BlockPos spawnPos = ctx.getAbsolutePos(new BlockPos(3, 1, 2));
@@ -76,7 +75,7 @@ public class EntityBridgeTest implements FabricGameTest {
         ctx.complete();
     }
 
-    @GameTest(templateName = EMPTY_STRUCTURE)
+    @GameTest(structure = "fabric-gametest-api-v1:empty")
     public void toEntityReconstructsTypeAndPosition(TestContext ctx) throws MsfParseException {
         BlockPos anchor   = ctx.getAbsolutePos(BlockPos.ORIGIN);
         BlockPos spawnPos = ctx.getAbsolutePos(new BlockPos(2, 1, 2));
@@ -111,7 +110,7 @@ public class EntityBridgeTest implements FabricGameTest {
      * <p>This is the regression test for the bug where entities were spawned at the
      * original extraction location regardless of the placement anchor.
      */
-    @GameTest(templateName = EMPTY_STRUCTURE)
+    @GameTest(structure = "fabric-gametest-api-v1:empty")
     public void toEntityUsesPlacementAnchorNotExtractionAnchor(TestContext ctx) throws MsfParseException {
         ServerWorld world = ctx.getWorld();
 
@@ -164,7 +163,7 @@ public class EntityBridgeTest implements FabricGameTest {
         ctx.complete();
     }
 
-    @GameTest(templateName = EMPTY_STRUCTURE)
+    @GameTest(structure = "fabric-gametest-api-v1:empty")
     public void idTagAbsentFromPayload(TestContext ctx) throws IOException {
         BlockPos anchor   = ctx.getAbsolutePos(BlockPos.ORIGIN);
         BlockPos spawnPos = ctx.getAbsolutePos(new BlockPos(2, 1, 2));
