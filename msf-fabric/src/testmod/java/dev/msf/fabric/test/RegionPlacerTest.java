@@ -11,9 +11,8 @@ import dev.msf.core.model.MsfRegion;
 import dev.msf.fabric.world.CanonicalFacing;
 import dev.msf.fabric.world.PlacementOptions;
 import dev.msf.fabric.world.RegionPlacer;
-import net.fabricmc.fabric.api.gametest.v1.FabricGameTest;
 import net.minecraft.block.Blocks;
-import net.minecraft.test.GameTest;
+import net.fabricmc.fabric.api.gametest.v1.GameTest;
 import net.minecraft.test.TestContext;
 import net.minecraft.util.math.BlockPos;
 
@@ -23,7 +22,7 @@ import java.util.List;
 /**
  * Gametests for {@link RegionPlacer} — block placement and rotation.
  */
-public class RegionPlacerTest implements FabricGameTest {
+public class RegionPlacerTest {
 
     /**
      * Builds a minimal single-block {@link MsfFile} with the given blockstate at
@@ -54,7 +53,7 @@ public class RegionPlacerTest implements FabricGameTest {
             .build();
     }
 
-    @GameTest(templateName = EMPTY_STRUCTURE)
+    @GameTest(structure = "fabric-gametest-api-v1:empty")
     public void placeSingleStone(TestContext ctx) throws MsfPaletteException, MsfParseException {
         MsfFile file = singleBlockFile("minecraft:stone");
         BlockPos anchor = ctx.getAbsolutePos(new BlockPos(1, 1, 1));
@@ -66,7 +65,7 @@ public class RegionPlacerTest implements FabricGameTest {
         ctx.complete();
     }
 
-    @GameTest(templateName = EMPTY_STRUCTURE)
+    @GameTest(structure = "fabric-gametest-api-v1:empty")
     public void skipAirDoesNotOverwriteExistingBlock(TestContext ctx)
             throws MsfPaletteException, MsfParseException {
         // Pre-place oak log so we can verify skipAir leaves it untouched
@@ -98,7 +97,7 @@ public class RegionPlacerTest implements FabricGameTest {
         ctx.complete();
     }
 
-    @GameTest(templateName = EMPTY_STRUCTURE)
+    @GameTest(structure = "fabric-gametest-api-v1:empty")
     public void rotationCW90FlipsXZ(TestContext ctx) throws MsfPaletteException, MsfParseException {
         // Region: stone at origin (0,0,0), size 1x1x1. Origin is at relative (1,1,0).
         // With no rotation it goes to anchor + (0,0,0) = anchor.

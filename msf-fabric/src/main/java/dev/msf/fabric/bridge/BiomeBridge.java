@@ -40,7 +40,7 @@ public final class BiomeBridge {
         }
 
         RegistryKey<Biome> key = RegistryKey.of(RegistryKeys.BIOME, id);
-        RegistryWrapper.Impl<Biome> biomeRegistry = registries.getWrapperOrThrow(RegistryKeys.BIOME);
+        RegistryWrapper.Impl<Biome> biomeRegistry = registries.getOrThrow(RegistryKeys.BIOME);
         if (biomeRegistry.getOptional(key).isEmpty()) {
             throw new MsfParseException("Unknown biome identifier: '" + biomeIdentifier + "'");
         }

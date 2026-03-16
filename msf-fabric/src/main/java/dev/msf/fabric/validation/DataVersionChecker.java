@@ -25,7 +25,7 @@ public final class DataVersionChecker {
      * version differs from the current game's data version.
      *
      * <p>The current game data version is obtained from
-     * {@code SharedConstants.getGameVersion().getSaveVersion().getId()}.
+     * {@code SharedConstants.getGameVersion().dataVersion().id()}.
      *
      * @param header          the MSF file header containing {@link MsfHeader#mcDataVersion()}
      * @param warningConsumer receives the warning if versions differ; may be {@code null}
@@ -35,7 +35,7 @@ public final class DataVersionChecker {
         if (warningConsumer == null) {
             return;
         }
-        int currentDataVersion = SharedConstants.getGameVersion().getSaveVersion().getId();
+        int currentDataVersion = SharedConstants.getGameVersion().dataVersion().id();
         long fileDataVersion = header.mcDataVersion();
 
         if (fileDataVersion != currentDataVersion) {

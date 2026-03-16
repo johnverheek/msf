@@ -50,7 +50,7 @@ APP_HOME=$( cd -- "$SCRIPT_DIR/.." && pwd -P )
 APP_NAME="Gradle"
 APP_JAR="gradle-wrapper.jar"
 WRAPPER_PROPERTIES="$SCRIPT_DIR/gradle/wrapper/gradle-wrapper.properties"
-GRADLE_VERSION="8.8"
+GRADLE_VERSION="9.4.0"
 GRADLE_HOME="$APP_HOME/.gradle-$GRADLE_VERSION"
 GRADLE_URL="https://services.gradle.org/distributions/gradle-${GRADLE_VERSION}-bin.zip"
 

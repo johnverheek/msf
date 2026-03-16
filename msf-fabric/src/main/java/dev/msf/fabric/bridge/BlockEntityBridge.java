@@ -10,6 +10,8 @@ import net.minecraft.nbt.NbtSizeTracker;
 import net.minecraft.registry.Registries;
 import net.minecraft.registry.RegistryWrapper;
 import net.minecraft.server.world.ServerWorld;
+import net.minecraft.storage.NbtReadView;
+import net.minecraft.util.ErrorReporter;
 import net.minecraft.util.math.BlockPos;
 
 import java.io.ByteArrayInputStream;
@@ -128,7 +130,7 @@ public final class BlockEntityBridge {
 
         try {
             NbtCompound nbt = nbtFromBytes(payload);
-            be.read(nbt, world.getRegistryManager());
+            be.read(NbtReadView.create(ErrorReporter.EMPTY, world.getRegistryManager(), nbt));
             // Mark chunk dirty so the data is persisted
             be.markDirty();
         } catch (IOException e) {

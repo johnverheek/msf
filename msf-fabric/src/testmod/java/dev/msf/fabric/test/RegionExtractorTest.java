@@ -12,9 +12,8 @@ import dev.msf.core.model.MsfMetadata;
 import dev.msf.core.model.MsfPalette;
 import dev.msf.core.model.MsfRegion;
 import dev.msf.fabric.world.RegionExtractor;
-import net.fabricmc.fabric.api.gametest.v1.FabricGameTest;
+import net.fabricmc.fabric.api.gametest.v1.GameTest;
 import net.minecraft.block.Blocks;
-import net.minecraft.test.GameTest;
 import net.minecraft.test.TestContext;
 import net.minecraft.util.math.BlockBox;
 import net.minecraft.util.math.BlockPos;
@@ -25,9 +24,9 @@ import java.util.List;
 /**
  * Gametests for {@link RegionExtractor} — verifies palette building and block data extraction.
  */
-public class RegionExtractorTest implements FabricGameTest {
+public class RegionExtractorTest {
 
-    @GameTest(templateName = EMPTY_STRUCTURE)
+    @GameTest(structure = "fabric-gametest-api-v1:empty")
     public void airPreseededAtIndexZero(TestContext ctx) throws MsfPaletteException {
         BlockPos anchor = ctx.getAbsolutePos(BlockPos.ORIGIN);
         BlockPos worldPos = ctx.getAbsolutePos(new BlockPos(1, 1, 1));
@@ -42,7 +41,7 @@ public class RegionExtractorTest implements FabricGameTest {
         ctx.complete();
     }
 
-    @GameTest(templateName = EMPTY_STRUCTURE)
+    @GameTest(structure = "fabric-gametest-api-v1:empty")
     public void singleStoneBlockInPalette(TestContext ctx) throws MsfPaletteException {
         ctx.setBlockState(1, 1, 1, Blocks.STONE.getDefaultState());
 
@@ -62,7 +61,7 @@ public class RegionExtractorTest implements FabricGameTest {
         ctx.complete();
     }
 
-    @GameTest(templateName = EMPTY_STRUCTURE)
+    @GameTest(structure = "fabric-gametest-api-v1:empty")
     public void twoIdenticalBlocksDeduplicated(TestContext ctx) throws MsfPaletteException {
         ctx.setBlockState(1, 1, 1, Blocks.STONE.getDefaultState());
         ctx.setBlockState(2, 1, 1, Blocks.STONE.getDefaultState());
@@ -88,7 +87,7 @@ public class RegionExtractorTest implements FabricGameTest {
         ctx.complete();
     }
 
-    @GameTest(templateName = EMPTY_STRUCTURE)
+    @GameTest(structure = "fabric-gametest-api-v1:empty")
     public void regionOriginRelativeToAnchor(TestContext ctx) throws MsfPaletteException {
         ctx.setBlockState(2, 1, 2, Blocks.STONE.getDefaultState());
 
@@ -111,7 +110,7 @@ public class RegionExtractorTest implements FabricGameTest {
     // Biome extraction tests
     // =========================================================================
 
-    @GameTest(templateName = EMPTY_STRUCTURE)
+    @GameTest(structure = "fabric-gametest-api-v1:empty")
     public void includeBiomesPopulatesBiomePalette(TestContext ctx) throws MsfPaletteException {
         BlockPos anchor = ctx.getAbsolutePos(BlockPos.ORIGIN);
         BlockPos worldPos = ctx.getAbsolutePos(new BlockPos(1, 1, 1));
@@ -129,7 +128,7 @@ public class RegionExtractorTest implements FabricGameTest {
         ctx.complete();
     }
 
-    @GameTest(templateName = EMPTY_STRUCTURE)
+    @GameTest(structure = "fabric-gametest-api-v1:empty")
     public void biomeDataLengthMatchesFormula(TestContext ctx) throws MsfPaletteException {
         // 1×1×1 region: ceil(1/4) × ceil(1/4) × ceil(1/4) = 1 biome entry (Section 7.6)
         BlockPos anchor = ctx.getAbsolutePos(BlockPos.ORIGIN);
@@ -149,7 +148,7 @@ public class RegionExtractorTest implements FabricGameTest {
         ctx.complete();
     }
 
-    @GameTest(templateName = EMPTY_STRUCTURE)
+    @GameTest(structure = "fabric-gametest-api-v1:empty")
     public void biomeRoundTripPreservesBiomePalette(TestContext ctx)
             throws MsfPaletteException, MsfException {
         BlockPos anchor = ctx.getAbsolutePos(BlockPos.ORIGIN);

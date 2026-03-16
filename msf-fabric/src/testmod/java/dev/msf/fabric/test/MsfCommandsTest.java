@@ -6,7 +6,6 @@ import dev.msf.core.model.MsfFile;
 import dev.msf.core.model.MsfRegion;
 import dev.msf.fabric.command.MsfCommands;
 import dev.msf.fabric.world.CanonicalFacing;
-import net.fabricmc.fabric.api.gametest.v1.FabricGameTest;
 import net.minecraft.block.BlockState;
 import net.minecraft.block.Blocks;
 import net.minecraft.block.entity.ChestBlockEntity;
@@ -16,7 +15,7 @@ import net.minecraft.item.ItemStack;
 import net.minecraft.item.Items;
 import net.minecraft.server.world.ServerWorld;
 import net.minecraft.state.property.Properties;
-import net.minecraft.test.GameTest;
+import net.fabricmc.fabric.api.gametest.v1.GameTest;
 import net.minecraft.test.TestContext;
 import net.minecraft.util.math.BlockBox;
 import net.minecraft.util.math.BlockPos;
@@ -31,13 +30,13 @@ import java.util.concurrent.atomic.AtomicReference;
 /**
  * Gametests for {@link MsfCommands} extract and place logic.
  */
-public class MsfCommandsTest implements FabricGameTest {
+public class MsfCommandsTest {
 
     // =========================================================================
     // 1. Extract → write → read back: block count and palette
     // =========================================================================
 
-    @GameTest(templateName = EMPTY_STRUCTURE)
+    @GameTest(structure = "fabric-gametest-api-v1:empty")
     public void extractWriteReadBack_blockCountMatchesPaletteSize(TestContext ctx) throws Exception {
         // 2×1×2 area: stone and dirt, with one air corner
         ctx.setBlockState(0, 1, 0, Blocks.STONE.getDefaultState());
@@ -76,7 +75,7 @@ public class MsfCommandsTest implements FabricGameTest {
     // 2. Extract → place round-trip: block at known position
     // =========================================================================
 
-    @GameTest(templateName = EMPTY_STRUCTURE)
+    @GameTest(structure = "fabric-gametest-api-v1:empty")
     public void extractPlaceRoundTrip_blockAtKnownPosition(TestContext ctx) throws Exception {
         ctx.setBlockState(1, 1, 1, Blocks.STONE.getDefaultState());
         ctx.setBlockState(2, 1, 1, Blocks.GOLD_BLOCK.getDefaultState());
@@ -112,7 +111,7 @@ public class MsfCommandsTest implements FabricGameTest {
     // 3. Place with East facing: directional block is rotated
     // =========================================================================
 
-    @GameTest(templateName = EMPTY_STRUCTURE)
+    @GameTest(structure = "fabric-gametest-api-v1:empty")
     public void placeWithEastFacing_rotatesDirectionalBlock(TestContext ctx) throws Exception {
         // Oak log with axis=Z (north-south orientation)
         BlockState logAxisZ = Blocks.OAK_LOG.getDefaultState().with(Properties.AXIS, Direction.Axis.Z);
@@ -149,7 +148,7 @@ public class MsfCommandsTest implements FabricGameTest {
     // 4. File not found: feedback contains error message
     // =========================================================================
 
-    @GameTest(templateName = EMPTY_STRUCTURE)
+    @GameTest(structure = "fabric-gametest-api-v1:empty")
     public void place_fileNotFound_sendsFeedback(TestContext ctx) {
         ServerWorld world = ctx.getWorld();
         BlockPos anchor = ctx.getAbsolutePos(BlockPos.ORIGIN);
@@ -173,14 +172,14 @@ public class MsfCommandsTest implements FabricGameTest {
     // 5. Armor stand round-trip: entity extracted, placed, re-appears in world
     // =========================================================================
 
-    @GameTest(templateName = EMPTY_STRUCTURE)
+    @GameTest(structure = "fabric-gametest-api-v1:empty")
     public void extractPlace_armorStand_roundTrip(TestContext ctx) throws Exception {
         ServerWorld world = ctx.getWorld();
 
         // Spawn armor stand at a known position within the test bounds
         BlockPos standRelPos = new BlockPos(2, 1, 2);
         BlockPos standAbsPos = ctx.getAbsolutePos(standRelPos);
-        ArmorStandEntity stand = EntityType.ARMOR_STAND.create(world);
+        ArmorStandEntity stand = EntityType.ARMOR_STAND.create(world, net.minecraft.entity.SpawnReason.LOAD);
         if (stand == null) throw new AssertionError("EntityType.ARMOR_STAND.create() returned null");
         stand.setPosition(standAbsPos.getX() + 0.5, standAbsPos.getY(), standAbsPos.getZ() + 0.5);
         world.spawnEntity(stand);
@@ -206,7 +205,7 @@ public class MsfCommandsTest implements FabricGameTest {
                 "Entity type must be minecraft:armor_stand");
 
             // Kill the original stand and verify it's gone
-            stand.kill();
+            stand.kill(world);
             Box searchBox = new Box(from.getX(), from.getY(), from.getZ(),
                 to.getX() + 1, to.getY() + 1, to.getZ() + 1);
             ctx.assertTrue(world.getEntitiesByClass(ArmorStandEntity.class, searchBox, e -> true).isEmpty(),
@@ -226,7 +225,7 @@ public class MsfCommandsTest implements FabricGameTest {
     // 6. Chest round-trip: block entity NBT (inventory item) preserved
     // =========================================================================
 
-    @GameTest(templateName = EMPTY_STRUCTURE)
+    @GameTest(structure = "fabric-gametest-api-v1:empty")
     public void extractPlace_chestWithItem_blockEntityRoundTrip(TestContext ctx) throws Exception {
         ServerWorld world = ctx.getWorld();
 
@@ -273,7 +272,7 @@ public class MsfCommandsTest implements FabricGameTest {
     // 7. Extract blocks-only region: feature flag bits 0 and 1 clear
     // =========================================================================
 
-    @GameTest(templateName = EMPTY_STRUCTURE)
+    @GameTest(structure = "fabric-gametest-api-v1:empty")
     public void extract_blocksOnly_featureFlagsEntityBitsClear(TestContext ctx) throws Exception {
         ctx.setBlockState(1, 1, 1, Blocks.STONE.getDefaultState());
         ServerWorld world = ctx.getWorld();
@@ -300,7 +299,7 @@ public class MsfCommandsTest implements FabricGameTest {
     // 8. Place file with no entity block: no exception thrown
     // =========================================================================
 
-    @GameTest(templateName = EMPTY_STRUCTURE)
+    @GameTest(structure = "fabric-gametest-api-v1:empty")
     public void place_fileWithNoEntityBlock_doesNotThrow(TestContext ctx) throws Exception {
         ctx.setBlockState(1, 1, 1, Blocks.STONE.getDefaultState());
         ServerWorld world = ctx.getWorld();
