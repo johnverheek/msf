@@ -1,52 +1,43 @@
-# Studio State — MSF
+# Studio State
 
-## Current Phase
-Verification — Session 14 complete. Owner manual verification required before release phase.
+## Project
+MSF (Minecraft Structured Format)
+Repo: https://github.com/johnverheek/msf
 
-## Version Target
-v1.0.0 (internal release — no external publishing until owner triggers publishing gate)
+## Current Version
+v1.0.0 — Released (Staged)
 
-## Spec Status
-V1.0 — published (DRAFT marker removed). No open issues.
+## Spec
+Revision: V1_O
+Status: Stable — no open issues.
 
-## Implementation Status
-Session 14 complete. All coding sessions done for v1.0.0.
+## Implementation
+Sessions completed: 1–13f
+Last session: Session 13f — BlockPosArgument relative coordinates, gametest API migration to Fabric 0.141.x, debug cleanup
 
-### Test Counts
-- msf-core: 211 tests
-- msf-cli: 35 tests
-- msf-fabric (standard): 0 (logic lives in msf-core; fabric module tested via gametests)
-- msf-fabric (gametests): 37 (require live Minecraft server, run via ./gradlew :msf-fabric:runGametest)
-- Total: 246 standard + 37 gametest = 283
+## Active Branch
+develop (post-merge)
 
-### Sessions 13–14 Deliverables
-- .github/workflows/ci.yml — CI pipeline
-- Version strings finalized (single-source 1.0.0)
-- CLI fat jar (msf-cli-1.0.0.jar)
-- README.md — full rewrite
-- CHANGELOG.md — v1.0.0 entry
-- Spec cleanup — DRAFT marker removed
-- Clean build verified — 246 tests pass, no disabled tests, deprecated API fixed
-- Implementation gate produced
+## Release Status
+Tag: v1.0.0 — created on main
+Publishing: Staged
+- GitHub Release: msf-cli fat-jar attached (GITHUB_TOKEN, no secrets required)
+- Maven Central: deferred — add MAVEN_USERNAME, MAVEN_PASSWORD, GPG_KEY, GPG_PASSWORD secrets when ready
+- Modrinth: deferred — create mod page, replace PLACEHOLDER_MODRINTH_PROJECT_ID in release.yml, add MODRINTH_TOKEN
+- CurseForge: deferred — create mod page, replace PLACEHOLDER_CURSEFORGE_PROJECT_ID in release.yml, add CURSEFORGE_TOKEN
 
-## What's Next
-1. **Owner: manual verification (Stories 3.2, 3.3)**
-   - Story 3.2: End-to-end round trip against Minecraft 1.21.1 with Fabric
-   - Story 3.3: Conversion path verification
-   - Commit results as verification log
-2. **Owner: GitHub branch protection** — require CI status check on develop and main
-3. **Release phase (app-release skill)** — after verification passes
+## Next Planning Items (v1.1.0)
+- Minecraft 26.1 port (after ecosystem stabilises — track Sodium and Litematica 26.1 releases as trigger)
+- Placement rotation based on player facing in /msf place
+- Entity capture policy — living mob exclusion option in /msf extract
+- /msf list and /msf preview in-game commands
+- Layers support in /msf extract (multi-layer extraction)
+- .schem (MCEdit) and Sponge format conversion in msf-cli
+- msf-cli output header (app version, format version, MC data version)
+- README benchmark table and install documentation (app-documentation task)
 
-## Gate Documents
-| Gate | Path | Status |
-|------|------|--------|
-| Planning | docs/gates/v1.0.0/PLANNING_GATE.md | Approved |
-| Implementation | docs/gates/v1.0.0/IMPLEMENTATION_GATE.md | Complete |
-| Release | — | Blocked on owner verification |
-| Publishing | — | Deferred until owner triggers |
+## Deferred to v1.2.0+
+- NeoForge and Quilt multi-loader support (new msf-neoforge module)
 
-## Branch
-Work: develop
-
-## Repo
-https://github.com/johnverheek/msf
+## Won't Fix
+- In-house NBT external library fallback — deliberate design decision

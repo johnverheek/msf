@@ -5,11 +5,15 @@ import dev.msf.core.model.MsfEntity;
 import dev.msf.core.util.UuidStripper;
 import net.minecraft.entity.Entity;
 import net.minecraft.entity.EntityType;
+import net.minecraft.entity.SpawnReason;
 import net.minecraft.nbt.NbtCompound;
 import net.minecraft.nbt.NbtIo;
 import net.minecraft.nbt.NbtSizeTracker;
 import net.minecraft.registry.Registries;
 import net.minecraft.server.world.ServerWorld;
+import net.minecraft.storage.NbtReadView;
+import net.minecraft.storage.NbtWriteView;
+import net.minecraft.util.ErrorReporter;
 import net.minecraft.util.Identifier;
 import net.minecraft.util.math.BlockPos;
 
@@ -58,10 +62,17 @@ public final class EntityBridge {
      *                                  after UUID stripping
      */
     public static MsfEntity fromEntity(Entity entity, BlockPos anchorPos) {
-        NbtCompound nbt = new NbtCompound();
-        entity.writeNbt(nbt);
-        // Section 8.2 — id tag MUST NOT appear in stored payload
+        // Section 8.2 — serialize entity data using WriteView (MC 1.21.11 storage API)
+        NbtWriteView writeView = NbtWriteView.create(ErrorReporter.EMPTY);
+        entity.writeData(writeView);
+        NbtCompound nbt = writeView.getNbt();
+        // Section 8.2 — id tag MUST NOT appear in stored payload (type is in the typed field)
         nbt.remove("id");
+        // Section 8.1 — position and rotation are stored in the typed f64/f32 fields, not the
+        // NBT payload. Strip "Pos" and "Rotation" so that readData() in toEntity() cannot
+        // restore the original extraction-time world coordinates and override setPosition().
+        nbt.remove("Pos");
+        nbt.remove("Rotation");
 
         byte[] rawBytes = nbtToBytes(nbt);
         // Section 8.2 — strip UUID tags via UuidStripper
@@ -108,7 +119,7 @@ public final class EntityBridge {
         }
         EntityType<?> entityType = Registries.ENTITY_TYPE.get(typeId);
 
-        Entity entity = entityType.create(world);
+        Entity entity = entityType.create(world, SpawnReason.LOAD);
         if (entity == null) {
             throw new MsfParseException(
                 "EntityType.create() returned null for type: '" + msfEntity.entityType() + "'"
@@ -119,7 +130,7 @@ public final class EntityBridge {
         if (payload != null && payload.length > 0) {
             try {
                 NbtCompound nbt = nbtFromBytes(payload);
-                entity.readNbt(nbt);
+                entity.readData(NbtReadView.create(ErrorReporter.EMPTY, world.getRegistryManager(), nbt));
             } catch (IOException e) {
                 throw new MsfParseException(
                     "Failed to deserialize NBT for entity type '" + msfEntity.entityType() + "'", e

@@ -14,11 +14,10 @@ import dev.msf.core.model.MsfRegion;
 import dev.msf.fabric.world.PlacementOptions;
 import dev.msf.fabric.world.RegionExtractor;
 import dev.msf.fabric.world.RegionPlacer;
-import net.fabricmc.fabric.api.gametest.v1.FabricGameTest;
 import net.minecraft.SharedConstants;
 import net.minecraft.block.Blocks;
 import net.minecraft.server.world.ServerWorld;
-import net.minecraft.test.GameTest;
+import net.fabricmc.fabric.api.gametest.v1.GameTest;
 import net.minecraft.test.TestContext;
 import net.minecraft.util.math.BlockBox;
 import net.minecraft.util.math.BlockPos;
@@ -30,9 +29,9 @@ import java.util.List;
  * End-to-end gametest: extract blocks from the world, serialize to MSF bytes,
  * deserialize from bytes, and place back — verifying the blocks are restored.
  */
-public class FullRoundTripTest implements FabricGameTest {
+public class FullRoundTripTest {
 
-    @GameTest(templateName = EMPTY_STRUCTURE)
+    @GameTest(structure = "fabric-gametest-api-v1:empty")
     public void twoBlockRoundTrip(TestContext ctx) throws MsfPaletteException, MsfException {
         // ---- Setup: place two distinctive blocks in area A (y=1) ----
         ctx.setBlockState(1, 1, 1, Blocks.STONE.getDefaultState());
@@ -50,7 +49,7 @@ public class FullRoundTripTest implements FabricGameTest {
         );
 
         MsfFile file = MsfFile.builder()
-            .mcDataVersion(SharedConstants.getGameVersion().getSaveVersion().getId())
+            .mcDataVersion(SharedConstants.getGameVersion().dataVersion().id())
             .metadata(MsfMetadata.builder().name("roundtrip-test").build())
             .palette(MsfPalette.of(new ArrayList<>(palette)))
             .layerIndex(MsfLayerIndex.of(List.of(
@@ -77,7 +76,7 @@ public class FullRoundTripTest implements FabricGameTest {
         ctx.complete();
     }
 
-    @GameTest(templateName = EMPTY_STRUCTURE)
+    @GameTest(structure = "fabric-gametest-api-v1:empty")
     public void fileSizeIsNonZeroAfterWrite(TestContext ctx) throws MsfPaletteException, MsfException {
         // Minimal single-air-block file
         MsfRegion region = MsfRegion.builder()
@@ -98,7 +97,7 @@ public class FullRoundTripTest implements FabricGameTest {
         ctx.complete();
     }
 
-    @GameTest(templateName = EMPTY_STRUCTURE)
+    @GameTest(structure = "fabric-gametest-api-v1:empty")
     public void palettePreservedAcrossRoundTrip(TestContext ctx) throws MsfPaletteException, MsfException {
         ctx.setBlockState(1, 1, 1, Blocks.GRASS_BLOCK.getDefaultState());
 

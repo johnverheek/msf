@@ -1,0 +1,242 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v[0-9]*.[0-9]*.[0-9]*'
+
+# write access is needed by softprops/action-gh-release to create the GitHub Release
+permissions:
+  contents: write
+
+jobs:
+
+  # ── 1. Build & test all modules ──────────────────────────────────────────────
+  build:
+    name: Build and test
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Java 21
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+
+      - name: Cache Gradle
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle.kts', '**/libs.versions.toml') }}
+          restore-keys: ${{ runner.os }}-gradle-
+
+      - name: Build and test all modules
+        run: ./gradlew clean build
+
+      - name: Upload msf-cli fat-jar
+        uses: actions/upload-artifact@v4
+        with:
+          name: msf-cli-jar
+          # Exclude the plain (non-shadow) jar; include only the fat jar
+          path: |
+            msf-cli/build/libs/msf-cli-*.jar
+            !msf-cli/build/libs/msf-cli-*-plain.jar
+          if-no-files-found: error
+
+  # ── 2. Publish msf-core → Maven Central ─────────────────────────────────────
+  #
+  # Skips gracefully when MAVEN_USERNAME or MAVEN_PASSWORD is not set.
+  # Secrets required (add in GitHub repo Settings → Secrets → Actions):
+  #   MAVEN_USERNAME    — Sonatype OSSRH username
+  #   MAVEN_PASSWORD    — Sonatype OSSRH password
+  #   GPG_KEY           — ASCII-armored GPG private key (for artifact signing)
+  #   GPG_PASSWORD      — passphrase for the GPG key
+  #
+  publish-core:
+    name: Publish msf-core to Maven Central
+    needs: build
+    runs-on: ubuntu-latest
+    env:
+      MAVEN_USERNAME: ${{ secrets.MAVEN_USERNAME }}
+      MAVEN_PASSWORD: ${{ secrets.MAVEN_PASSWORD }}
+
+    steps:
+      - name: Check Maven credentials
+        id: creds
+        run: |
+          if [ -z "$MAVEN_USERNAME" ] || [ -z "$MAVEN_PASSWORD" ]; then
+            echo "present=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::MAVEN_USERNAME or MAVEN_PASSWORD not configured — skipping Maven Central publish"
+          else
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: actions/checkout@v4
+        if: steps.creds.outputs.present == 'true'
+
+      - name: Set up Java 21
+        if: steps.creds.outputs.present == 'true'
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+
+      - name: Cache Gradle
+        if: steps.creds.outputs.present == 'true'
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle.kts', '**/libs.versions.toml') }}
+          restore-keys: ${{ runner.os }}-gradle-
+
+      - name: Publish to Maven Central (Sonatype OSSRH)
+        if: steps.creds.outputs.present == 'true'
+        # Gradle reads ORG_GRADLE_PROJECT_* env vars as project properties automatically.
+        # signingKey / signingPassword are optional — signing is skipped if absent.
+        env:
+          ORG_GRADLE_PROJECT_mavenUsername: ${{ secrets.MAVEN_USERNAME }}
+          ORG_GRADLE_PROJECT_mavenPassword: ${{ secrets.MAVEN_PASSWORD }}
+          ORG_GRADLE_PROJECT_signingKey: ${{ secrets.GPG_KEY }}
+          ORG_GRADLE_PROJECT_signingPassword: ${{ secrets.GPG_PASSWORD }}
+        run: ./gradlew :msf-core:publishMavenJavaPublicationToSonatypeRepository
+
+  # ── 3. Publish msf-fabric → Modrinth and CurseForge ─────────────────────────
+  #
+  # Each platform publishes independently; both are skipped when both tokens are absent.
+  # Secrets required (add in GitHub repo Settings → Secrets → Actions):
+  #   MODRINTH_TOKEN    — Modrinth API token
+  #   CURSEFORGE_TOKEN  — CurseForge API token
+  #
+  # Before enabling:
+  #   1. Create the mod page on Modrinth and replace PLACEHOLDER_MODRINTH_PROJECT_ID
+  #      with the numeric or slug project ID shown on your mod page.
+  #   2. Create the mod page on CurseForge and replace PLACEHOLDER_CURSEFORGE_PROJECT_ID
+  #      with the numeric project ID shown on your mod page.
+  #
+  publish-fabric:
+    name: Publish msf-fabric to mod platforms
+    needs: build
+    runs-on: ubuntu-latest
+    env:
+      MODRINTH_TOKEN: ${{ secrets.MODRINTH_TOKEN }}
+      CURSEFORGE_TOKEN: ${{ secrets.CURSEFORGE_TOKEN }}
+
+    steps:
+      - name: Check platform credentials
+        id: creds
+        run: |
+          any=false
+          if [ -n "$MODRINTH_TOKEN" ]; then
+            echo "modrinth=true" >> "$GITHUB_OUTPUT"
+            any=true
+          else
+            echo "modrinth=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::MODRINTH_TOKEN not configured — skipping Modrinth publish"
+          fi
+          if [ -n "$CURSEFORGE_TOKEN" ]; then
+            echo "curseforge=true" >> "$GITHUB_OUTPUT"
+            any=true
+          else
+            echo "curseforge=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::CURSEFORGE_TOKEN not configured — skipping CurseForge publish"
+          fi
+          echo "any_present=$any" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/checkout@v4
+        if: steps.creds.outputs.any_present == 'true'
+
+      - name: Set up Java 21
+        if: steps.creds.outputs.any_present == 'true'
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+
+      - name: Cache Gradle
+        if: steps.creds.outputs.any_present == 'true'
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle.kts', '**/libs.versions.toml') }}
+          restore-keys: ${{ runner.os }}-gradle-
+
+      - name: Build msf-fabric remapped jar
+        if: steps.creds.outputs.any_present == 'true'
+        run: ./gradlew :msf-fabric:remapJar
+
+      - name: Publish to Modrinth
+        if: steps.creds.outputs.modrinth == 'true'
+        uses: Kir-Antipov/mc-publish@v3.3
+        with:
+          # Replace with the Modrinth project ID or slug from your mod page URL:
+          # https://modrinth.com/mod/<slug>
+          modrinth-id: PLACEHOLDER_MODRINTH_PROJECT_ID
+          modrinth-token: ${{ secrets.MODRINTH_TOKEN }}
+          files: |
+            msf-fabric/build/libs/msf-fabric-*.jar
+            !msf-fabric/build/libs/msf-fabric-*-dev.jar
+            !msf-fabric/build/libs/msf-fabric-*-sources.jar
+          name: "MSF ${{ github.ref_name }}"
+          version: ${{ github.ref_name }}
+          version-type: release
+          changelog-file: CHANGELOG.md
+          game-versions: 1.21.1
+          loaders: fabric
+          dependencies: |
+            fabric-api | required
+
+      - name: Publish to CurseForge
+        if: steps.creds.outputs.curseforge == 'true'
+        uses: Kir-Antipov/mc-publish@v3.3
+        with:
+          # Replace with the numeric CurseForge project ID from your mod page:
+          # https://www.curseforge.com/minecraft/mc-mods/<slug>
+          curseforge-id: PLACEHOLDER_CURSEFORGE_PROJECT_ID
+          curseforge-token: ${{ secrets.CURSEFORGE_TOKEN }}
+          files: |
+            msf-fabric/build/libs/msf-fabric-*.jar
+            !msf-fabric/build/libs/msf-fabric-*-dev.jar
+            !msf-fabric/build/libs/msf-fabric-*-sources.jar
+          name: "MSF ${{ github.ref_name }}"
+          version: ${{ github.ref_name }}
+          version-type: release
+          changelog-file: CHANGELOG.md
+          game-versions: 1.21.1
+          loaders: fabric
+          dependencies: |
+            fabric-api | required
+
+  # ── 4. GitHub Release (draft) ─────────────────────────────────────────────────
+  #
+  # Creates a draft release. The owner publishes it manually after verification.
+  # No secrets required — uses the default GITHUB_TOKEN.
+  #
+  github-release:
+    name: Create GitHub Release (draft)
+    needs: build
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download msf-cli fat-jar
+        uses: actions/download-artifact@v4
+        with:
+          name: msf-cli-jar
+          path: release-artifacts/
+
+      - name: Create draft GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          draft: true
+          name: "MSF ${{ github.ref_name }}"
+          body_path: CHANGELOG.md
+          files: release-artifacts/*.jar

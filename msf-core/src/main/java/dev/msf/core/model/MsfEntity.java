@@ -38,13 +38,13 @@ public final class MsfEntity {
     // Fields
     // -------------------------------------------------------------------------
 
-    /** Entity X position in world space (f64, little-endian). */
+    /** Entity X position relative to the schematic anchor (f64, little-endian). */
     private final double positionX;
 
-    /** Entity Y position in world space (f64, little-endian). */
+    /** Entity Y position relative to the schematic anchor (f64, little-endian). */
     private final double positionY;
 
-    /** Entity Z position in world space (f64, little-endian). */
+    /** Entity Z position relative to the schematic anchor (f64, little-endian). */
     private final double positionZ;
 
     /** Entity yaw rotation in degrees (f32, little-endian). */
@@ -92,7 +92,7 @@ public final class MsfEntity {
     // -------------------------------------------------------------------------
 
     /**
-     * Returns the X position of the entity in world space.
+     * Returns the X position of the entity relative to the schematic anchor.
      *
      * @return X coordinate (IEEE 754 f64)
      */
@@ -101,7 +101,7 @@ public final class MsfEntity {
     }
 
     /**
-     * Returns the Y position of the entity in world space.
+     * Returns the Y position of the entity relative to the schematic anchor.
      *
      * @return Y coordinate (IEEE 754 f64)
      */
@@ -110,7 +110,7 @@ public final class MsfEntity {
     }
 
     /**
-     * Returns the Z position of the entity in world space.
+     * Returns the Z position of the entity relative to the schematic anchor.
      *
      * @return Z coordinate (IEEE 754 f64)
      */

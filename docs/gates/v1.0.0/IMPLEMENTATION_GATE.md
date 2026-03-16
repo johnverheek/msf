@@ -148,3 +148,42 @@ The `msf-fabric` module's regular test source set contains no standalone JUnit t
 3. **Release phase** — `app-release` skill: create `release/v1.0.0` branch, tag `v1.0.0` on main, create GitHub Release with artifacts (spec PDF or MD, `msf-cli-1.0.0.jar`, `msf-fabric-1.0.0+1.21.1.jar`)
 
 No external publishing until owner triggers the publishing gate.
+
+---
+
+## Session 13 Addendum — Entity & BlockEntity Fabric Bridge (2026-03-14)
+
+### Epic 1 — Entity & BlockEntity Fabric Bridge
+
+| Story | Description | Status |
+|-------|-------------|--------|
+| Entity extraction | `RegionExtractor.extractEntities()` captures non-player entities within bounds; UUIDs stripped; stored in MsfFile entity block | ✅ Done |
+| Entity placement | `RegionPlacer.place()` spawns entities after blocks; new UUID assigned per Section 8.2 | ✅ Done |
+| Block entity extraction | `RegionExtractor.extractBlockEntities()` scans bounds for block entities; positions relative to anchor; UUIDs stripped | ✅ Done |
+| Block entity placement | `RegionPlacer.place()` applies block entity NBT after blocks placed (two-phase) per Section 9 | ✅ Done |
+| Feature flag wiring | `executeExtract` only sets entity/block-entity blocks when content found; bits 0 and 1 clear for blocks-only regions | ✅ Done |
+| MsfWriter compression overload | `MsfWriter.writeFile(MsfFile, CompressionType, Consumer)` added; existing overload delegates to it with ZSTD | ✅ Done |
+
+### Epic 2 — Canonical Test Vectors
+
+| Vector | Compression | Entities | Status |
+|--------|-------------|----------|--------|
+| minimal.msf | NONE (0x00) | No | ✅ Generated |
+| zstd.msf | ZSTD (0x01) | No | ✅ Generated |
+| lz4.msf | LZ4 (0x02) | No | ✅ Generated |
+| brotli.msf | BROTLI (0x03) | No | ✅ Generated |
+| entities.msf | ZSTD | Yes (armor_stand + chest) | ✅ Generated |
+
+All vectors committed to `msf-core/src/test/resources/`. Validated by `MsfReferenceFileTest` canonical vector tests (5 new tests).
+
+### New Tests Added
+
+- `MsfReferenceFileTest` — 5 canonical vector validation tests (minimal, zstd, lz4, brotli, entities)
+- `MsfCommandsTest` — 4 new gametests: armor stand round-trip, chest with item round-trip, blocks-only feature flags clear, no-entity-block place succeeds
+
+### Build Verification (Session 13)
+
+| Module | Tests | Result |
+|--------|-------|--------|
+| msf-core | 201+ (6 pre-existing Brotli failures unchanged) | PASS |
+| msf-fabric gametests | 41 (was 37; +4 new) | PASS |
