@@ -7,6 +7,8 @@
 | 1 | Gradle scaffold, exception hierarchy, MsfWarning, MsfHeader, MsfReader/MsfWriter (header only), JUnit 5 tests | Complete |
 | 2 | Global palette, metadata block, layer index, region data (bit packing, all compression types, biome data) | Complete |
 | 3 | Entity block, block entity block, full MsfFile round trip | Complete |
+| 13f | BlockPosArgument relative coordinates, gametest API migration to Fabric 0.141.x, debug cleanup | Complete |
+| 14 | /msf list (paginated, clickable prev/next, per-file metadata, error annotation), Mod Menu integration (ModMenuIntegration, modmenu entrypoint), msf-cli output header (stderr, all subcommands) | Complete — uncommitted |
 
 ## Specification Review Rounds
 
@@ -25,7 +27,7 @@
 ## Publishing Targets
 
 - `dev.msf:msf-core:1.0.0` → Maven Central
-- `msf-fabric:1.0.0+1.21.1` → Modrinth + CurseForge
+- `msf-fabric:1.0.0+1.21.11` → Modrinth + CurseForge
 
 ## Open Questions (Post-V1)
 

@@ -5,15 +5,15 @@ MSF (Minecraft Structured Format)
 Repo: https://github.com/johnverheek/msf
 
 ## Current Version
-v1.1.0 — In Planning
+v1.1.0 — In Implementation
 
 ## Spec
 Revision: V1_O
 Status: Stable — no open issues. No spec changes required for v1.1.0.
 
 ## Implementation
-Sessions completed: 1–13f
-Last session: Session 13f — BlockPosArgument relative coordinates, gametest API migration to Fabric 0.141.x, debug cleanup
+Sessions completed: 1–14
+Last session: Session 14 — /msf list (paginated, clickable prev/next, per-file metadata, error annotation), Mod Menu integration, msf-cli output header. All changes uncommitted.
 
 ## Active Branch
 feature/v1.1.0
