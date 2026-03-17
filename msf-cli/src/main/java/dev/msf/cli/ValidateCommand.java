@@ -40,6 +40,8 @@ public class ValidateCommand implements Callable<Integer> {
 
     @Override
     public Integer call() {
+        MsfCli.printHeader();
+
         System.out.println("Validating: " + file);
         System.out.println();
 

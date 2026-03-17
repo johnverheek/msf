@@ -53,6 +53,8 @@ public class ConvertCommand implements Callable<Integer> {
 
     @Override
     public Integer call() {
+        MsfCli.printHeader();
+
         if (!Files.exists(input)) {
             System.err.println("Error: file not found: " + input);
             return 2;

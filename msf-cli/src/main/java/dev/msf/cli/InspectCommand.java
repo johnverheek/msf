@@ -41,6 +41,8 @@ public class InspectCommand implements Callable<Integer> {
 
     @Override
     public Integer call() {
+        MsfCli.printHeader();
+
         if (!Files.exists(file)) {
             System.err.println("Error: file not found: " + file);
             return 2;

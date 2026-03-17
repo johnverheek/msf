@@ -1,6 +1,7 @@
 package dev.msf.fabric.command;
 
 import com.mojang.brigadier.CommandDispatcher;
+import com.mojang.brigadier.arguments.IntegerArgumentType;
 import com.mojang.brigadier.arguments.StringArgumentType;
 import net.minecraft.command.argument.BlockPosArgumentType;
 import dev.msf.core.MsfException;
@@ -26,7 +27,10 @@ import net.minecraft.server.command.CommandManager;
 import net.minecraft.server.command.ServerCommandSource;
 import net.minecraft.server.network.ServerPlayerEntity;
 import net.minecraft.server.world.ServerWorld;
+import net.minecraft.text.ClickEvent;
+import net.minecraft.text.MutableText;
 import net.minecraft.text.Text;
+import net.minecraft.util.Formatting;
 import net.minecraft.util.math.BlockBox;
 import net.minecraft.util.math.BlockPos;
 import net.minecraft.util.math.Direction;
@@ -35,8 +39,10 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 import java.util.function.Consumer;
+import java.util.stream.Stream;
 
 /**
  * Registers the {@code /msf extract} and {@code /msf place} commands.
@@ -53,6 +59,9 @@ import java.util.function.Consumer;
  *       anchor. Accepts absolute, relative, and local coordinate notation. The target
  *       facing is the player's current horizontal facing; the canonical facing is read
  *       from the file's metadata.</li>
+ *   <li>{@code /msf list [page <n>]} — lists all {@code .msf} files in the schematics
+ *       directory with filename, size, format version, and layer count. Paginates at
+ *       8 entries per page with clickable prev/next navigation.</li>
  * </ul>
  *
  * <h2>Output directory</h2>
@@ -70,7 +79,8 @@ public final class MsfCommands {
     // =========================================================================
 
     /**
-     * Registers {@code /msf extract} and {@code /msf place} with the given dispatcher.
+     * Registers {@code /msf extract}, {@code /msf place}, and {@code /msf list}
+     * with the given dispatcher.
      *
      * @param dispatcher the server command dispatcher
      */
@@ -79,6 +89,7 @@ public final class MsfCommands {
             CommandManager.literal("msf")
                 .then(buildExtractCommand())
                 .then(buildPlaceCommand())
+                .then(buildListCommand())
         );
     }
 
@@ -123,6 +134,18 @@ public final class MsfCommands {
                 })
             ))
         ;
+    }
+
+    private static com.mojang.brigadier.builder.LiteralArgumentBuilder<ServerCommandSource> buildListCommand() {
+        return CommandManager.literal("list")
+            .executes(ctx -> executeList(ctx.getSource(), 1))
+            .then(CommandManager.literal("page")
+                .then(CommandManager.argument("page", IntegerArgumentType.integer(1))
+                    .executes(ctx -> executeList(
+                        ctx.getSource(), IntegerArgumentType.getInteger(ctx, "page")
+                    ))
+                )
+            );
     }
 
     // =========================================================================
@@ -258,6 +281,115 @@ public final class MsfCommands {
                 + " at (" + anchor.getX() + ", " + anchor.getY() + ", " + anchor.getZ() + ")"
         ));
         return 1;
+    }
+
+    // =========================================================================
+    // List logic
+    // =========================================================================
+
+    private static final int LIST_PAGE_SIZE = 8;
+
+    private static int executeList(ServerCommandSource source, int page) {
+        Consumer<Text> feedback = msg -> source.sendFeedback(() -> msg, false);
+
+        // Collect all .msf files, sorted by name
+        List<Path> files;
+        if (!Files.isDirectory(SCHEMATICS_DIR)) {
+            feedback.accept(Text.literal("No schematics found (msf-schematics/ does not exist)."));
+            return 1;
+        }
+        try (Stream<Path> stream = Files.list(SCHEMATICS_DIR)) {
+            files = stream
+                .filter(p -> p.getFileName().toString().endsWith(".msf"))
+                .sorted(Comparator.comparing(p -> p.getFileName().toString()))
+                .toList();
+        } catch (IOException e) {
+            feedback.accept(Text.literal("Error listing schematics: " + e.getMessage()));
+            return 0;
+        }
+
+        if (files.isEmpty()) {
+            feedback.accept(Text.literal("No schematics found in msf-schematics/."));
+            return 1;
+        }
+
+        int totalPages = Math.max(1, (files.size() + LIST_PAGE_SIZE - 1) / LIST_PAGE_SIZE);
+        int clampedPage = Math.min(Math.max(page, 1), totalPages);
+        int start = (clampedPage - 1) * LIST_PAGE_SIZE;
+        int end = Math.min(start + LIST_PAGE_SIZE, files.size());
+
+        feedback.accept(Text.literal(
+            "--- MSF Schematics (page " + clampedPage + "/" + totalPages
+                + ", " + files.size() + " file" + (files.size() != 1 ? "s" : "") + ") ---"
+        ).formatted(Formatting.GOLD));
+
+        for (int i = start; i < end; i++) {
+            Path f = files.get(i);
+            String name = f.getFileName().toString();
+            String sizePart = formatFileSize(f);
+            String metaPart = readFileMeta(f);
+            feedback.accept(Text.literal(
+                (i + 1) + ". " + name + "  " + sizePart + "  " + metaPart
+            ));
+        }
+
+        // Pagination nav row
+        if (totalPages > 1) {
+            MutableText nav = Text.empty();
+            if (clampedPage > 1) {
+                nav.append(Text.literal("[← prev]").styled(s -> s
+                    .withClickEvent(new ClickEvent.RunCommand("/msf list page " + (clampedPage - 1)))
+                    .withFormatting(Formatting.AQUA)));
+                nav.append(Text.literal("  "));
+            }
+            nav.append(Text.literal("Page " + clampedPage + "/" + totalPages));
+            if (clampedPage < totalPages) {
+                nav.append(Text.literal("  "));
+                nav.append(Text.literal("[next →]").styled(s -> s
+                    .withClickEvent(new ClickEvent.RunCommand("/msf list page " + (clampedPage + 1)))
+                    .withFormatting(Formatting.AQUA)));
+            }
+            feedback.accept(nav);
+        }
+
+        return 1;
+    }
+
+    /** Returns a human-readable file size string, or "?" on error. */
+    private static String formatFileSize(Path file) {
+        try {
+            long size = Files.size(file);
+            if (size < 1024L) {
+                return size + " B";
+            } else if (size < 1048576L) {
+                return String.format("%.1f KB", size / 1024.0);
+            } else {
+                return String.format("%.1f MB", size / 1048576.0);
+            }
+        } catch (IOException e) {
+            return "?";
+        }
+    }
+
+    /**
+     * Reads the MSF header and layer index from a file and returns a display string
+     * of the form {@code V1.0  3 layers}.
+     * Returns {@code [error: <message>]} if the file cannot be parsed.
+     */
+    private static String readFileMeta(Path file) {
+        try {
+            byte[] bytes = Files.readAllBytes(file);
+            MsfFile msf = MsfReader.readFile(bytes, MsfReaderConfig.allowChecksumFailure(), null);
+            int major = msf.header().majorVersion();
+            int minor = msf.header().minorVersion();
+            int layers = msf.layerIndex().layers().size();
+            return "V" + major + "." + minor + "  " + layers + " layer" + (layers != 1 ? "s" : "");
+        } catch (Exception e) {
+            String msg = e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName();
+            // Truncate long messages to keep the chat line readable
+            if (msg.length() > 60) msg = msg.substring(0, 57) + "...";
+            return "[error: " + msg + "]";
+        }
     }
 
     // =========================================================================

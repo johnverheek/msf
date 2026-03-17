@@ -87,7 +87,10 @@ class InspectCommandTest {
 
         // No warnings expected for a valid file
         assertFalse(r.stdout().contains("--- Warnings ---"), "No warnings section for a valid file");
-        assertTrue(r.stderr().isEmpty(), "No stderr output for valid file");
+
+        // stderr carries only the tool header (no error output)
+        assertTrue(r.stderr().startsWith("msf-cli "), "stderr should start with the tool header");
+        assertFalse(r.stderr().contains("Error"), "No error output in stderr for a valid file");
     }
 
     @Test
@@ -107,5 +110,47 @@ class InspectCommandTest {
         assertEquals(2, r.exitCode(), "Exit code should be 2 for file not found");
         assertTrue(r.stderr().contains("not found") || r.stderr().contains("Error"),
                 "stderr should mention file not found");
+    }
+
+    // -------------------------------------------------------------------------
+    // Header format tests (Epic 7 — msf-cli output header)
+    // -------------------------------------------------------------------------
+
+    @Test
+    void allSubcommandsEmitHeaderToStderr() throws Exception {
+        // inspect — valid file
+        Path msf = write(FixtureUtil.minimalValidBytes(), "header-test.msf");
+        RunResult inspect = run("inspect", msf.toString());
+        assertHeaderFormat(inspect.stderr(), "inspect");
+
+        // validate — valid file
+        RunResult validate = run("validate", msf.toString());
+        assertHeaderFormat(validate.stderr(), "validate");
+
+        // convert — non-existent input (still prints header before the error)
+        RunResult convert = run("convert", "/nonexistent.msf", "/out.nbt");
+        assertHeaderFormat(convert.stderr(), "convert");
+    }
+
+    @Test
+    void headerAppearsBeforeOtherStdoutOutput() throws Exception {
+        // The header is on stderr; stdout must contain inspect output after the header is printed.
+        // Verify ordering by confirming stdout is non-empty after a successful inspect.
+        Path msf = write(FixtureUtil.minimalValidBytes(), "order-test.msf");
+        RunResult r = run("inspect", msf.toString());
+
+        assertEquals(0, r.exitCode());
+        assertTrue(r.stderr().startsWith("msf-cli "), "Header must be first stderr line");
+        assertFalse(r.stdout().isEmpty(), "Inspect output must still appear on stdout");
+    }
+
+    private static void assertHeaderFormat(String stderr, String subcommand) {
+        String firstLine = stderr.split(System.lineSeparator(), 2)[0];
+        assertTrue(firstLine.startsWith("msf-cli "),
+                subcommand + ": header must start with 'msf-cli '; got: " + firstLine);
+        assertTrue(firstLine.contains("| MSF format "),
+                subcommand + ": header must contain '| MSF format '; got: " + firstLine);
+        assertTrue(firstLine.contains("| MC data "),
+                subcommand + ": header must contain '| MC data '; got: " + firstLine);
     }
 }

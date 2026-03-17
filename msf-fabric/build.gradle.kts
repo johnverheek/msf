@@ -10,6 +10,11 @@ dependencies {
     modImplementation("net.fabricmc:fabric-loader:${libs.versions.fabricLoader.get()}")
     modImplementation("net.fabricmc.fabric-api:fabric-api:${libs.versions.fabricApi.get()}")
 
+    // Mod Menu — optional; only needed for compile-time entrypoint binding.
+    // Mod Menu is not bundled and is not required at runtime; the entrypoint is
+    // only invoked when Mod Menu is installed alongside msf-fabric.
+    modCompileOnly("com.terraformersmc:modmenu:14.0.0")
+
     // msf-core and its runtime compression dependencies bundled as Jar-in-Jar
     include(implementation(project(":msf-core"))!!)
     include("com.github.luben:zstd-jni:1.5.5-11")
