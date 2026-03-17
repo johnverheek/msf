@@ -1,0 +1,151 @@
+@startuml MSF Architecture
+skinparam defaultFontName Monospaced
+skinparam componentStyle rectangle
+skinparam backgroundColor #FAFAFA
+skinparam component {
+  BackgroundColor #FFFFFF
+  BorderColor #555555
+  FontColor #111111
+}
+skinparam package {
+  BackgroundColor #F0F4FF
+  BorderColor #3355AA
+  FontColor #111111
+}
+skinparam arrow {
+  Color #444444
+  FontColor #444444
+  FontSize 11
+}
+skinparam note {
+  BackgroundColor #FFFDE7
+  BorderColor #AAAAAA
+}
+
+title MSF — Module Boundaries and Data Flow
+
+package "msf-core  (pure Java 21, zero Minecraft dependencies)" as core {
+
+  component "MsfReader" as reader
+  component "MsfWriter" as writer
+
+  package "Data Model" as model {
+    component "MsfFile" as file
+    component "MsfHeader" as header
+    component "MsfPalette" as palette
+    component "MsfLayer / MsfRegion" as layer
+    component "MsfMetadata" as metadata
+    component "MsfEntity / MsfBlockEntity" as entities
+  }
+
+  package "Codec" as codec {
+    component "BitPackedArray" as bitpack
+    component "BlockDataCodec" as blockcodec
+    component "RegionCompressor\nRegionDecompressor" as compress
+  }
+
+  package "Checksum" as checksum {
+    component "XxHash3 (xxHash3-64)" as xxhash
+  }
+
+  package "NBT" as nbt {
+    component "NbtReader / NbtWriter\n(in-house, no external library)" as nbtio
+  }
+
+  package "Converters" as converters {
+    component "VanillaStructureFormat\n(.nbt ↔ .msf)" as vanilla
+    component "LitematicaFormat\n(.litematic ↔ .msf)" as litematica
+  }
+
+  reader --> model : populates
+  writer --> model : reads
+  reader --> codec : decodes block data
+  writer --> codec : encodes block data
+  codec --> compress : compress / decompress regions
+  reader --> xxhash : verify checksums
+  writer --> xxhash : compute checksums
+  reader --> nbtio : parse entity / block entity payloads
+  writer --> nbtio : serialise entity / block entity payloads
+  vanilla --> reader : reads .msf
+  vanilla --> writer : writes .msf
+  vanilla --> nbtio : reads / writes vanilla NBT
+  litematica --> reader : reads .msf
+  litematica --> writer : writes .msf
+  litematica --> nbtio : reads / writes Litematica NBT
+
+}
+
+package "msf-fabric  (Fabric 1.21.11, depends on msf-core)" as fabric {
+
+  package "Bridge Layer" as bridge {
+    component "BlockStateBridge\n(blockstate string ↔ BlockState)" as bsbridge
+    component "EntityBridge\n(MsfEntity ↔ Entity, UUID strip/assign)" as entitybridge
+    component "BlockEntityBridge\n(MsfBlockEntity ↔ BlockEntity)" as bebridge
+    component "BiomeBridge\n(world biome queries at 4×4×4)" as biomebridge
+  }
+
+  package "World I/O" as worldio {
+    component "RegionExtractor\n(world subvolume → MsfFile)" as extractor
+    component "RegionPlacer\n(MsfFile → world, rotation + mirror)" as placer
+  }
+
+  package "Commands" as commands {
+    component "/msf extract\n(--layers N, --living-mobs)" as cmdextract
+    component "/msf place\n(--rotate, --mirror)" as cmdplace
+    component "/msf list\n(paginated, metadata)" as cmdlist
+    component "/msf preview\n(bounding box wireframe)" as cmdpreview
+  }
+
+  extractor --> bsbridge : resolve blockstates
+  extractor --> entitybridge : convert entities
+  extractor --> bebridge : convert block entities
+  extractor --> biomebridge : sample biomes
+  placer --> bsbridge : resolve blockstates
+  placer --> entitybridge : spawn entities
+  placer --> bebridge : apply block entity NBT
+  cmdextract --> extractor : invoke
+  cmdplace --> placer : invoke
+  cmdlist --> reader #line:gray : read headers
+  cmdpreview --> reader #line:gray : read extents
+
+}
+
+package "msf-cli  (standalone fat jar, depends on msf-core)" as cli {
+
+  component "inspect\n(header + layer summary)" as inspect
+  component "validate\n(structure + checksums)" as validate
+  component "convert\n(.nbt / .litematic / .msf)" as convert
+  component "MsfCli.printHeader()\n(stderr: version + format + MC data)" as cliheader
+
+  inspect --> cliheader
+  validate --> cliheader
+  convert --> cliheader
+
+}
+
+' Cross-module data flow
+fabric --> core : depends on (one-way)
+cli --> core : depends on (one-way)
+
+extractor --> writer #line:blue;line.dashed : produces MsfFile →\nMsfWriter serialises
+placer --> reader #line:blue;line.dashed : MsfReader parses\n→ feeds RegionPlacer
+inspect --> reader #line:blue;line.dashed : MsfReader
+validate --> reader #line:blue;line.dashed : MsfReader
+convert --> vanilla #line:blue;line.dashed : .nbt path
+convert --> litematica #line:blue;line.dashed : .litematic path
+
+note bottom of bridge
+  Bridge is the only layer where
+  Minecraft registry lookups occur.
+  msf-core never interprets strings —
+  blockstate, entity type, and biome
+  identifiers are opaque UTF-8.
+end note
+
+note bottom of converters
+  Pending tick data from Litematica
+  is silently dropped.
+  Structures saved in rested state.
+end note
+
+@enduml

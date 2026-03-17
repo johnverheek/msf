@@ -1,14 +1,21 @@
 # MSF Architecture
 
+## Diagram
+
+[architecture.puml](architecture.puml) — PlantUML source covering module boundaries and data flow. Render with the [PlantUML VS Code extension](https://marketplace.visualstudio.com/items?itemName=jebbs.plantuml), the [PlantUML CLI](https://plantuml.com/download), or the [online server](https://www.plantuml.com/plantuml/uml/).
+
+---
+
 ## System Overview
 
 MSF is a two-module Java 21 library. The dependency direction is one-way:
 
 ```
 msf-fabric  →  msf-core
+msf-cli     →  msf-core
 ```
 
-msf-fabric depends on msf-core. msf-core has zero external dependencies beyond its compression and checksum libraries.
+msf-fabric and msf-cli both depend on msf-core. msf-core has zero external dependencies beyond its compression and checksum libraries.
 
 ## Module Responsibilities
 
@@ -56,7 +63,7 @@ Blockstate strings, entity type strings, and biome identifiers are opaque UTF-8 
 - Copies of bit packing, checksum, or compression code
 - Any class that duplicates msf-core functionality
 
-**Publishing target:** Modrinth and CurseForge as `msf-fabric:1.0.0+1.21.1`
+**Publishing target:** Modrinth and CurseForge as `msf-fabric:1.1.0+1.21.11`
 
 ## Package Structure
 
@@ -73,9 +80,9 @@ dev.msf.core
                 MsfChecksumException, MsfPaletteException, MsfCompressionException
 
 dev.msf.fabric
-  bridge/       BlockStateBridge, EntityBridge, BiomeBridge
+  bridge/       BlockStateBridge, EntityBridge, BlockEntityBridge, BiomeBridge
   world/        RegionExtractor, RegionPlacer
-  validation/   BlockStateValidator, DataVersionChecker
+  command/      MsfCommands, CanonicalFacing, PlacementOptions
 ```
 
 ## Key Design Decisions
