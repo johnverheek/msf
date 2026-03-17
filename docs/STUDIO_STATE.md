@@ -13,7 +13,7 @@ Status: Stable — no open issues. No spec changes required for v1.1.0.
 
 ## Implementation
 Sessions completed: 1–15
-Last session: Session 15 — /msf place --rotate and --mirror flags (Epic 3)
+Last session: Session 15 — /msf place --rotate and --mirror flags; CanonicalFacing.rotateClockwise; PlacementOptions mirror component; RegionPlacer mirror-then-rotate for blocks and block entities; 9 new tests. Commit 3f13ec3.
 
 ## Active Branch
 feature/v1.1.0

@@ -8,7 +8,8 @@
 | 2 | Global palette, metadata block, layer index, region data (bit packing, all compression types, biome data) | Complete |
 | 3 | Entity block, block entity block, full MsfFile round trip | Complete |
 | 13f | BlockPosArgument relative coordinates, gametest API migration to Fabric 0.141.x, debug cleanup | Complete |
-| 14 | /msf list (paginated, clickable prev/next, per-file metadata, error annotation), Mod Menu integration (ModMenuIntegration, modmenu entrypoint), msf-cli output header (stderr, all subcommands) | Complete — uncommitted |
+| 14 | /msf list (paginated, clickable prev/next, per-file metadata, error annotation), Mod Menu integration, msf-cli output header | Complete |
+| 15 | /msf place --rotate and --mirror flags; CanonicalFacing.rotateClockwise; PlacementOptions mirror component; RegionPlacer mirror-then-rotate ordering for blocks and block entities; 9 new tests | Complete — commit 3f13ec3 |
 
 ## Specification Review Rounds
 
