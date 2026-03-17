@@ -3,6 +3,7 @@ package dev.msf.fabric.command;
 import com.mojang.brigadier.CommandDispatcher;
 import com.mojang.brigadier.arguments.IntegerArgumentType;
 import com.mojang.brigadier.arguments.StringArgumentType;
+import com.mojang.brigadier.context.CommandContext;
 import net.minecraft.command.argument.BlockPosArgumentType;
 import dev.msf.core.MsfException;
 import dev.msf.core.MsfPaletteException;
@@ -30,6 +31,7 @@ import net.minecraft.server.world.ServerWorld;
 import net.minecraft.text.ClickEvent;
 import net.minecraft.text.MutableText;
 import net.minecraft.text.Text;
+import net.minecraft.util.BlockMirror;
 import net.minecraft.util.Formatting;
 import net.minecraft.util.math.BlockBox;
 import net.minecraft.util.math.BlockPos;
@@ -120,20 +122,68 @@ public final class MsfCommands {
         return CommandManager.literal("place")
             .then(CommandManager.argument("filename", StringArgumentType.word())
             .then(CommandManager.argument("pos", BlockPosArgumentType.blockPos())
-                .executes(ctx -> {
-                    String filename = StringArgumentType.getString(ctx, "filename");
-                    BlockPos pos = BlockPosArgumentType.getBlockPos(ctx, "pos");
-
-                    ServerCommandSource source = ctx.getSource();
-                    Path inputPath = SCHEMATICS_DIR.resolve(filename + ".msf");
-
-                    return executePlace(
-                        source.getWorld(), pos, facingFromSource(source),
-                        inputPath, msg -> source.sendFeedback(() -> msg, false)
-                    );
-                })
+                // No flags — existing v1.0.0 behaviour
+                .executes(ctx -> executePlaceCmd(ctx, null, BlockMirror.NONE))
+                // --rotate [--mirror]
+                .then(CommandManager.literal("--rotate")
+                .then(CommandManager.argument("degrees", IntegerArgumentType.integer(0, 270))
+                    .suggests((ctx, b) -> { b.suggest(0); b.suggest(90); b.suggest(180); b.suggest(270); return b.buildFuture(); })
+                    .executes(ctx -> executePlaceCmd(
+                        ctx, IntegerArgumentType.getInteger(ctx, "degrees"), BlockMirror.NONE))
+                    .then(CommandManager.literal("--mirror")
+                    .then(CommandManager.argument("axis", StringArgumentType.word())
+                        .suggests((ctx, b) -> { b.suggest("x"); b.suggest("z"); return b.buildFuture(); })
+                        .executes(ctx -> executePlaceCmd(
+                            ctx,
+                            IntegerArgumentType.getInteger(ctx, "degrees"),
+                            mirrorFromAxis(StringArgumentType.getString(ctx, "axis"))
+                        ))
+                    ))
+                ))
+                // --mirror [--rotate]
+                .then(CommandManager.literal("--mirror")
+                .then(CommandManager.argument("axis", StringArgumentType.word())
+                    .suggests((ctx, b) -> { b.suggest("x"); b.suggest("z"); return b.buildFuture(); })
+                    .executes(ctx -> executePlaceCmd(
+                        ctx, null, mirrorFromAxis(StringArgumentType.getString(ctx, "axis"))))
+                    .then(CommandManager.literal("--rotate")
+                    .then(CommandManager.argument("degrees", IntegerArgumentType.integer(0, 270))
+                        .suggests((ctx, b) -> { b.suggest(0); b.suggest(90); b.suggest(180); b.suggest(270); return b.buildFuture(); })
+                        .executes(ctx -> executePlaceCmd(
+                            ctx,
+                            IntegerArgumentType.getInteger(ctx, "degrees"),
+                            mirrorFromAxis(StringArgumentType.getString(ctx, "axis"))
+                        ))
+                    ))
+                ))
             ))
         ;
+    }
+
+    /** Extracts filename, pos, and source from {@code ctx} and delegates to {@link #executePlace}. */
+    private static int executePlaceCmd(
+        CommandContext<ServerCommandSource> ctx,
+        Integer rotateDeg,
+        BlockMirror mirror
+    ) {
+        String filename = StringArgumentType.getString(ctx, "filename");
+        BlockPos pos = BlockPosArgumentType.getBlockPos(ctx, "pos");
+        ServerCommandSource source = ctx.getSource();
+        Path inputPath = SCHEMATICS_DIR.resolve(filename + ".msf");
+        return executePlace(
+            source.getWorld(), pos, facingFromSource(source),
+            rotateDeg, mirror, inputPath,
+            msg -> source.sendFeedback(() -> msg, false)
+        );
+    }
+
+    /** Maps axis string {@code "x"} → {@link BlockMirror#LEFT_RIGHT}, {@code "z"} → {@link BlockMirror#FRONT_BACK}. */
+    private static BlockMirror mirrorFromAxis(String axis) {
+        return switch (axis) {
+            case "x" -> BlockMirror.LEFT_RIGHT;
+            case "z" -> BlockMirror.FRONT_BACK;
+            default  -> BlockMirror.NONE;
+        };
     }
 
     private static com.mojang.brigadier.builder.LiteralArgumentBuilder<ServerCommandSource> buildListCommand() {
@@ -233,10 +283,11 @@ public final class MsfCommands {
     }
 
     /**
-     * Reads an MSF file and places it in {@code world} at the given anchor.
+     * Reads an MSF file and places it in {@code world} at the given anchor with no explicit
+     * rotation override and no mirror. The rotation is derived from the delta between the
+     * canonical facing in the file metadata and {@code targetFacing}.
      *
-     * <p>The canonical facing is read from the file's metadata. Blocks are placed with
-     * the rotation needed to go from the canonical facing to {@code targetFacing}.
+     * <p>Delegates to {@link #executePlace(ServerWorld, BlockPos, CanonicalFacing, Integer, BlockMirror, Path, Consumer)}.
      *
      * @param world        the target world
      * @param anchor       world position to use as the MSF anchor point
@@ -249,6 +300,40 @@ public final class MsfCommands {
         ServerWorld world,
         BlockPos anchor,
         CanonicalFacing targetFacing,
+        Path inputPath,
+        Consumer<Text> feedback
+    ) {
+        return executePlace(world, anchor, targetFacing, null, BlockMirror.NONE, inputPath, feedback);
+    }
+
+    /**
+     * Reads an MSF file and places it in {@code world} at the given anchor, with optional
+     * explicit rotation and mirror.
+     *
+     * <p>When {@code rotateDeg} is non-null the placement uses that explicit clockwise rotation
+     * (0 / 90 / 180 / 270 degrees) instead of deriving rotation from the player's facing. When
+     * {@code rotateDeg} is {@code null} the rotation is the delta from the file's canonical
+     * facing to {@code targetFacing}, preserving the v1.0.0 behaviour.
+     *
+     * <p>The mirror transform (if any) is applied before rotation, matching Minecraft's
+     * structure placement convention.
+     *
+     * @param world        the target world
+     * @param anchor       world position to use as the MSF anchor point
+     * @param targetFacing the player's facing; ignored when {@code rotateDeg} is non-null
+     * @param rotateDeg    explicit clockwise rotation in degrees (0 / 90 / 180 / 270), or
+     *                     {@code null} to derive rotation from {@code targetFacing}
+     * @param mirror       mirror transform to apply; {@link BlockMirror#NONE} for no mirror
+     * @param inputPath    path to read the MSF file from
+     * @param feedback     receives feedback text (success or error messages)
+     * @return {@code 1} on success, {@code 0} on failure
+     */
+    public static int executePlace(
+        ServerWorld world,
+        BlockPos anchor,
+        CanonicalFacing targetFacing,
+        Integer rotateDeg,
+        BlockMirror mirror,
         Path inputPath,
         Consumer<Text> feedback
     ) {
@@ -267,7 +352,21 @@ public final class MsfCommands {
         }
 
         CanonicalFacing canonicalFacing = CanonicalFacing.fromMsfValue(file.metadata().canonicalFacing());
-        PlacementOptions options = new PlacementOptions(false, true, true, canonicalFacing, targetFacing);
+
+        // Explicit --rotate N: compute effective target as canonical rotated by N/90 CW steps.
+        // Null (player-facing mode): use targetFacing directly — identical to v1.0.0 behaviour.
+        CanonicalFacing effectiveTarget;
+        if (rotateDeg != null) {
+            if (rotateDeg % 90 != 0) {
+                feedback.accept(Text.literal("--rotate must be 0, 90, 180, or 270; got " + rotateDeg));
+                return 0;
+            }
+            effectiveTarget = canonicalFacing.rotateClockwise(rotateDeg / 90);
+        } else {
+            effectiveTarget = targetFacing;
+        }
+
+        PlacementOptions options = new PlacementOptions(false, true, true, canonicalFacing, effectiveTarget, mirror);
 
         try {
             RegionPlacer.place(file, world, anchor, options);

@@ -22,6 +22,8 @@ import net.minecraft.util.math.BlockPos;
 import net.minecraft.util.math.Box;
 import net.minecraft.util.math.Direction;
 
+import net.minecraft.util.BlockMirror;
+
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
@@ -289,6 +291,120 @@ public class MsfCommandsTest {
                 "Blocks-only region: entity block must be absent (bit 0 clear)");
             ctx.assertTrue(file.blockEntities().isEmpty(),
                 "Blocks-only region: block entity block must be absent (bit 1 clear)");
+        } finally {
+            Files.deleteIfExists(output);
+        }
+        ctx.complete();
+    }
+
+    // =========================================================================
+    // 9. Place with --rotate 90: block positions match CW90 transform (planning gate round-trip)
+    // =========================================================================
+
+    @GameTest(structure = "fabric-gametest-api-v1:empty")
+    public void placeWithRotate90_blockPositionsMatch(TestContext ctx) throws Exception {
+        // 2×1×1 region: stone at (2,1,2), gold block at (3,1,2). Anchor = abs(2,1,2).
+        ctx.setBlockState(2, 1, 2, Blocks.STONE.getDefaultState());
+        ctx.setBlockState(3, 1, 2, Blocks.GOLD_BLOCK.getDefaultState());
+
+        ServerWorld world = ctx.getWorld();
+        BlockPos anchor = ctx.getAbsolutePos(new BlockPos(2, 1, 2));
+        BlockPos to     = ctx.getAbsolutePos(new BlockPos(3, 1, 2));
+
+        Path output = Files.createTempFile("msf-rot90-", ".msf");
+        try {
+            MsfCommands.executeExtract(world, BlockBox.create(anchor, to), CanonicalFacing.NORTH, output, msg -> {});
+
+            ctx.setBlockState(2, 1, 2, Blocks.AIR.getDefaultState());
+            ctx.setBlockState(3, 1, 2, Blocks.AIR.getDefaultState());
+
+            // --rotate 90 → CW90 transform: (x,z) → (-z, x)
+            // Stone at local (0,0) → (0,0)  → anchor        → relPos (2,1,2)
+            // Gold  at local (1,0) → (0,1)  → anchor+(0,0,1) → relPos (2,1,3)
+            int result = MsfCommands.executePlace(
+                world, anchor, CanonicalFacing.NORTH, 90, BlockMirror.NONE, output, msg -> {}
+            );
+            ctx.assertTrue(result == 1, "executePlace with --rotate 90 must return 1");
+            ctx.assertTrue(ctx.getBlockState(new BlockPos(2, 1, 2)).isOf(Blocks.STONE),
+                "STONE must remain at anchor after CW90");
+            ctx.assertTrue(ctx.getBlockState(new BlockPos(2, 1, 3)).isOf(Blocks.GOLD_BLOCK),
+                "GOLD_BLOCK must move from x+1 to z+1 after CW90 rotation");
+        } finally {
+            Files.deleteIfExists(output);
+        }
+        ctx.complete();
+    }
+
+    // =========================================================================
+    // 10. Place with --mirror x: blockstate is reflected (LEFT_RIGHT)
+    // =========================================================================
+
+    @GameTest(structure = "fabric-gametest-api-v1:empty")
+    public void placeWithMirrorX_blockStateMirrored(TestContext ctx) throws Exception {
+        // Oak stairs facing east — LEFT_RIGHT mirror should produce facing=west
+        BlockState stairsEast = Blocks.OAK_STAIRS.getDefaultState()
+            .with(net.minecraft.state.property.Properties.HORIZONTAL_FACING, Direction.EAST);
+        ctx.setBlockState(2, 1, 2, stairsEast);
+
+        ServerWorld world = ctx.getWorld();
+        BlockPos pos = ctx.getAbsolutePos(new BlockPos(2, 1, 2));
+
+        Path output = Files.createTempFile("msf-mirx-", ".msf");
+        try {
+            MsfCommands.executeExtract(world, BlockBox.create(pos, pos), CanonicalFacing.NORTH, output, msg -> {});
+            ctx.setBlockState(2, 1, 2, Blocks.AIR.getDefaultState());
+
+            int result = MsfCommands.executePlace(
+                world, pos, CanonicalFacing.NORTH, null, BlockMirror.LEFT_RIGHT, output, msg -> {}
+            );
+            ctx.assertTrue(result == 1, "executePlace with --mirror x must return 1");
+
+            BlockState placed = ctx.getBlockState(new BlockPos(2, 1, 2));
+            ctx.assertTrue(placed.isOf(Blocks.OAK_STAIRS), "OAK_STAIRS must be placed after mirror");
+            ctx.assertTrue(
+                placed.get(net.minecraft.state.property.Properties.HORIZONTAL_FACING) == Direction.WEST,
+                "LEFT_RIGHT mirror of east-facing stairs must yield west; got: "
+                    + placed.get(net.minecraft.state.property.Properties.HORIZONTAL_FACING)
+            );
+        } finally {
+            Files.deleteIfExists(output);
+        }
+        ctx.complete();
+    }
+
+    // =========================================================================
+    // 11. Place with --rotate 90 --mirror x combined: both transforms applied
+    // =========================================================================
+
+    @GameTest(structure = "fabric-gametest-api-v1:empty")
+    public void placeWithRotateAndMirror_combined(TestContext ctx) throws Exception {
+        // Oak stairs facing east:
+        //   mirror LEFT_RIGHT first  → facing=west
+        //   rotate CW90              → facing=north  (west + CW90 → north)
+        BlockState stairsEast = Blocks.OAK_STAIRS.getDefaultState()
+            .with(net.minecraft.state.property.Properties.HORIZONTAL_FACING, Direction.EAST);
+        ctx.setBlockState(2, 1, 2, stairsEast);
+
+        ServerWorld world = ctx.getWorld();
+        BlockPos pos = ctx.getAbsolutePos(new BlockPos(2, 1, 2));
+
+        Path output = Files.createTempFile("msf-rotmir-", ".msf");
+        try {
+            MsfCommands.executeExtract(world, BlockBox.create(pos, pos), CanonicalFacing.NORTH, output, msg -> {});
+            ctx.setBlockState(2, 1, 2, Blocks.AIR.getDefaultState());
+
+            int result = MsfCommands.executePlace(
+                world, pos, CanonicalFacing.NORTH, 90, BlockMirror.LEFT_RIGHT, output, msg -> {}
+            );
+            ctx.assertTrue(result == 1, "executePlace with --rotate 90 --mirror x must return 1");
+
+            BlockState placed = ctx.getBlockState(new BlockPos(2, 1, 2));
+            ctx.assertTrue(placed.isOf(Blocks.OAK_STAIRS), "OAK_STAIRS must be placed after rotate+mirror");
+            ctx.assertTrue(
+                placed.get(net.minecraft.state.property.Properties.HORIZONTAL_FACING) == Direction.NORTH,
+                "east + LEFT_RIGHT mirror + CW90 must yield north; got: "
+                    + placed.get(net.minecraft.state.property.Properties.HORIZONTAL_FACING)
+            );
         } finally {
             Files.deleteIfExists(output);
         }

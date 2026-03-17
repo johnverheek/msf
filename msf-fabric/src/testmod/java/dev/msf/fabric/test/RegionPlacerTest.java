@@ -87,7 +87,7 @@ public class RegionPlacerTest {
             .build();
 
         PlacementOptions skipAir = new PlacementOptions(
-            true, false, false, CanonicalFacing.NORTH, CanonicalFacing.NORTH
+            true, false, false, CanonicalFacing.NORTH, CanonicalFacing.NORTH, net.minecraft.util.BlockMirror.NONE
         );
         BlockPos anchor = ctx.getAbsolutePos(new BlockPos(1, 1, 1));
         RegionPlacer.place(file, ctx.getWorld(), anchor, skipAir);
@@ -126,7 +126,7 @@ public class RegionPlacerTest {
 
         // Rotate from NORTH to EAST (CW90)
         PlacementOptions opts = new PlacementOptions(
-            false, false, false, CanonicalFacing.NORTH, CanonicalFacing.EAST
+            false, false, false, CanonicalFacing.NORTH, CanonicalFacing.EAST, net.minecraft.util.BlockMirror.NONE
         );
         BlockPos anchor = ctx.getAbsolutePos(new BlockPos(2, 2, 2));
         RegionPlacer.place(file, ctx.getWorld(), anchor, opts);

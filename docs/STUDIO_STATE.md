@@ -12,8 +12,8 @@ Revision: V1_O
 Status: Stable — no open issues. No spec changes required for v1.1.0.
 
 ## Implementation
-Sessions completed: 1–14
-Last session: Session 14 — /msf list (paginated, clickable prev/next, per-file metadata, error annotation), Mod Menu integration, msf-cli output header. All changes uncommitted.
+Sessions completed: 1–15
+Last session: Session 15 — /msf place --rotate and --mirror flags (Epic 3)
 
 ## Active Branch
 feature/v1.1.0

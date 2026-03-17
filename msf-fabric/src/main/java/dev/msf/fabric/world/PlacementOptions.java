@@ -1,5 +1,7 @@
 package dev.msf.fabric.world;
 
+import net.minecraft.util.BlockMirror;
+
 /**
  * Options controlling how {@link RegionPlacer} places a region into the world.
  *
@@ -15,22 +17,25 @@ package dev.msf.fabric.world;
  * @param targetFacing       the facing direction to use when placing; rotation transform
  *                           is derived from the delta between {@code canonicalFacing} and
  *                           this value (Section 10.2)
+ * @param mirror             mirror transform to apply before rotation; {@link BlockMirror#NONE}
+ *                           means no mirroring
  */
 public record PlacementOptions(
     boolean skipAir,
     boolean placeBlockEntities,
     boolean spawnEntities,
     CanonicalFacing canonicalFacing,
-    CanonicalFacing targetFacing
+    CanonicalFacing targetFacing,
+    BlockMirror mirror
 ) {
 
-    /** Places all blocks with no rotation, without skipping air, with entities and block entities. */
+    /** Places all blocks with no rotation or mirror, without skipping air, with entities and block entities. */
     public static final PlacementOptions DEFAULT = new PlacementOptions(
-        false, true, true, CanonicalFacing.NORTH, CanonicalFacing.NORTH
+        false, true, true, CanonicalFacing.NORTH, CanonicalFacing.NORTH, BlockMirror.NONE
     );
 
-    /** Places all blocks with no rotation, skips air, with entities and block entities. */
+    /** Places all blocks with no rotation or mirror, skips air, with entities and block entities. */
     public static final PlacementOptions SKIP_AIR = new PlacementOptions(
-        true, true, true, CanonicalFacing.NORTH, CanonicalFacing.NORTH
+        true, true, true, CanonicalFacing.NORTH, CanonicalFacing.NORTH, BlockMirror.NONE
     );
 }

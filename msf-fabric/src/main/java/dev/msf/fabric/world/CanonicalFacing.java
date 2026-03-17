@@ -47,6 +47,23 @@ public enum CanonicalFacing {
     }
 
     /**
+     * Returns the facing that is {@code cwSteps} clockwise 90° steps from this one.
+     *
+     * <p>Wraps modulo 4; negative values and values greater than 3 are handled correctly.
+     * For example, {@code NORTH.rotateClockwise(1)} returns {@link #EAST}.
+     *
+     * @param cwSteps number of clockwise 90° steps to rotate (any integer)
+     * @return the facing after rotation
+     */
+    public CanonicalFacing rotateClockwise(int cwSteps) {
+        int target = ((cwOrdinal() + cwSteps) % 4 + 4) % 4;
+        for (CanonicalFacing f : values()) {
+            if (f.cwOrdinal() == target) return f;
+        }
+        throw new AssertionError("unreachable");
+    }
+
+    /**
      * Returns the clockwise ordinal of this direction (North=0, East=1, South=2, West=3).
      * Used to compute the {@link net.minecraft.util.BlockRotation} delta between two facings.
      */

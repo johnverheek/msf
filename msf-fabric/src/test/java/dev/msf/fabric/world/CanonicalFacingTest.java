@@ -112,6 +112,45 @@ class CanonicalFacingTest {
         assertEquals(1, delta(CanonicalFacing.EAST, CanonicalFacing.SOUTH));
     }
 
+    // =========================================================================
+    // rotateClockwise
+    // =========================================================================
+
+    @Test
+    void rotateClockwise_byZero_isIdentity() {
+        for (CanonicalFacing f : CanonicalFacing.values()) {
+            assertSame(f, f.rotateClockwise(0), "rotateClockwise(0) must be identity for " + f);
+        }
+    }
+
+    @Test
+    void rotateClockwise_northBy1_isEast() {
+        assertSame(CanonicalFacing.EAST, CanonicalFacing.NORTH.rotateClockwise(1));
+    }
+
+    @Test
+    void rotateClockwise_northBy2_isSouth() {
+        assertSame(CanonicalFacing.SOUTH, CanonicalFacing.NORTH.rotateClockwise(2));
+    }
+
+    @Test
+    void rotateClockwise_northBy3_isWest() {
+        assertSame(CanonicalFacing.WEST, CanonicalFacing.NORTH.rotateClockwise(3));
+    }
+
+    @Test
+    void rotateClockwise_by4_isIdentity() {
+        for (CanonicalFacing f : CanonicalFacing.values()) {
+            assertSame(f, f.rotateClockwise(4), "rotateClockwise(4) must be identity for " + f);
+        }
+    }
+
+    @Test
+    void rotateClockwise_negativeWraps() {
+        // -1 step CW = 3 steps CW = CCW90: NORTH → WEST
+        assertSame(CanonicalFacing.WEST, CanonicalFacing.NORTH.rotateClockwise(-1));
+    }
+
     @Test
     void rotationDelta_alwaysInRangeZeroToThree() {
         for (CanonicalFacing from : CanonicalFacing.values()) {
