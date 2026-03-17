@@ -10,6 +10,7 @@
 | 13f | BlockPosArgument relative coordinates, gametest API migration to Fabric 0.141.x, debug cleanup | Complete |
 | 14 | /msf list (paginated, clickable prev/next, per-file metadata, error annotation), Mod Menu integration, msf-cli output header | Complete |
 | 15 | /msf place --rotate and --mirror flags; CanonicalFacing.rotateClockwise; PlacementOptions mirror component; RegionPlacer mirror-then-rotate ordering for blocks and block entities; 9 new tests | Complete — commit 3f13ec3 |
+| 16 | Entity capture policy (living mob exclusion, --living-mobs flag, ArmorStandEntity exemption); --layers N in /msf extract (vertical subdivision, shared palette, backwards-compat single-layer path); 4 new gametests | Complete — commit 21e9d1b |
 
 ## Specification Review Rounds
 

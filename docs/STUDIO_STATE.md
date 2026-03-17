@@ -13,7 +13,7 @@ Status: Stable — no open issues. No spec changes required for v1.1.0.
 
 ## Implementation
 Sessions completed: 1–16
-Last session: Session 16 — Epic 4 (entity capture policy: --living-mobs flag, default excludes living mobs except armor stands) + Epic 5 (--layers N in /msf extract: ceil-division vertical subdivision, shared palette); 4 new gametests.
+Last session: Session 16 — entity capture policy (living mob exclusion, --living-mobs flag, ArmorStandEntity exemption), --layers N in /msf extract (vertical subdivision, shared global palette, backwards-compat single-layer path), 4 new gametests. Known edge case: entities captured via SpawnReason.LOAD produce minimal-state NBT — correct rested-state design intent. Commit 21e9d1b.
 
 ## Active Branch
 feature/v1.1.0
