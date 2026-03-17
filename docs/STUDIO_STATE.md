@@ -5,7 +5,7 @@ MSF (Minecraft Structured Format)
 Repo: https://github.com/johnverheek/msf
 
 ## Current Version
-v1.1.0 — In Implementation
+v1.1.0 — Documentation Pass
 
 ## Spec
 Revision: V1_O
@@ -13,7 +13,9 @@ Status: Stable — no open issues. No spec changes required for v1.1.0.
 
 ## Implementation
 Sessions completed: 1–17
-Last session: Session 17 — /msf preview <filename> bounding box wireframe (Epic 2): ActivePreview record, per-player HashMap<UUID,ActivePreview>, END_ROD particle wireframe respawned every 10 ticks via ServerTickEvents.END_SERVER_TICK, /msf preview off to cancel, auto-clear on disconnect via ServerPlayConnectionEvents.DISCONNECT. Anchor = raycasted block face (8-block range) or player feet. Bounding box = union of all region extents across all layers.
+Last session: Session 17 — /msf preview bounding box wireframe; server-side END_ROD particle edges; raycast anchor (8-block range, fallback to player feet); ActivePreview per player UUID; 10-tick auto-refresh via ServerTickEvents.END_SERVER_TICK; auto-clear on disconnect via ServerPlayConnectionEvents.DISCONNECT; /msf preview off; spawnParticles 4-boolean signature for MC 1.21.11. Commit 5984877.
+
+Implementation complete. Next phase: app-documentation (Epic 8).
 
 ## Active Branch
 feature/v1.1.0

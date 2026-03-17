@@ -11,6 +11,7 @@
 | 14 | /msf list (paginated, clickable prev/next, per-file metadata, error annotation), Mod Menu integration, msf-cli output header | Complete |
 | 15 | /msf place --rotate and --mirror flags; CanonicalFacing.rotateClockwise; PlacementOptions mirror component; RegionPlacer mirror-then-rotate ordering for blocks and block entities; 9 new tests | Complete — commit 3f13ec3 |
 | 16 | Entity capture policy (living mob exclusion, --living-mobs flag, ArmorStandEntity exemption); --layers N in /msf extract (vertical subdivision, shared palette, backwards-compat single-layer path); 4 new gametests | Complete — commit 21e9d1b |
+| 17 | /msf preview bounding box wireframe — server-side END_ROD particle edges, raycast anchor, ActivePreview per player UUID, 10-tick auto-refresh via ServerTickEvents, auto-clear on disconnect; /msf preview off | Complete — commit 5984877 |
 
 ## Specification Review Rounds
 
