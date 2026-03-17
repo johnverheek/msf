@@ -3,6 +3,9 @@
 build/
 out/
 
+# Claude
+.claude/
+
 # Minecraft run instance
 run/
 
