@@ -12,8 +12,8 @@ Revision: V1_O
 Status: Stable — no open issues. No spec changes required for v1.1.0.
 
 ## Implementation
-Sessions completed: 1–16
-Last session: Session 16 — entity capture policy (living mob exclusion, --living-mobs flag, ArmorStandEntity exemption), --layers N in /msf extract (vertical subdivision, shared global palette, backwards-compat single-layer path), 4 new gametests. Known edge case: entities captured via SpawnReason.LOAD produce minimal-state NBT — correct rested-state design intent. Commit 21e9d1b.
+Sessions completed: 1–17
+Last session: Session 17 — /msf preview <filename> bounding box wireframe (Epic 2): ActivePreview record, per-player HashMap<UUID,ActivePreview>, END_ROD particle wireframe respawned every 10 ticks via ServerTickEvents.END_SERVER_TICK, /msf preview off to cancel, auto-clear on disconnect via ServerPlayConnectionEvents.DISCONNECT. Anchor = raycasted block face (8-block range) or player feet. Bounding box = union of all region extents across all layers.
 
 ## Active Branch
 feature/v1.1.0

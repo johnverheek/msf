@@ -24,6 +24,8 @@ import dev.msf.fabric.world.RegionExtractor;
 import dev.msf.fabric.world.RegionPlacer;
 import net.minecraft.SharedConstants;
 import net.minecraft.entity.Entity;
+import net.minecraft.particle.ParticleTypes;
+import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.command.CommandManager;
 import net.minecraft.server.command.ServerCommandSource;
 import net.minecraft.server.network.ServerPlayerEntity;
@@ -33,6 +35,8 @@ import net.minecraft.text.MutableText;
 import net.minecraft.text.Text;
 import net.minecraft.util.BlockMirror;
 import net.minecraft.util.Formatting;
+import net.minecraft.util.hit.BlockHitResult;
+import net.minecraft.util.hit.HitResult;
 import net.minecraft.util.math.BlockBox;
 import net.minecraft.util.math.BlockPos;
 import net.minecraft.util.math.Direction;
@@ -42,12 +46,16 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.UUID;
 import java.util.function.Consumer;
 import java.util.stream.Stream;
 
 /**
- * Registers the {@code /msf extract} and {@code /msf place} commands.
+ * Registers the {@code /msf extract}, {@code /msf place}, {@code /msf list}, and
+ * {@code /msf preview} commands.
  *
  * <h2>Commands</h2>
  * <ul>
@@ -64,6 +72,8 @@ import java.util.stream.Stream;
  *   <li>{@code /msf list [page <n>]} — lists all {@code .msf} files in the schematics
  *       directory with filename, size, format version, and layer count. Paginates at
  *       8 entries per page with clickable prev/next navigation.</li>
+ *   <li>{@code /msf preview <filename>} — shows a persistent end-rod particle wireframe
+ *       bounding box at the player's look target. {@code /msf preview off} cancels it.</li>
  * </ul>
  *
  * <h2>Output directory</h2>
@@ -73,6 +83,24 @@ import java.util.stream.Stream;
 public final class MsfCommands {
 
     private static final Path SCHEMATICS_DIR = Path.of("msf-schematics");
+
+    // =========================================================================
+    // Preview state
+    // =========================================================================
+
+    /** Stores the bounding box for one player's active bounding box preview. */
+    private record ActivePreview(
+        ServerWorld world,
+        int minX, int minY, int minZ,
+        int maxX, int maxY, int maxZ) {}
+
+    /** Active previews keyed by player UUID. */
+    private static final Map<UUID, ActivePreview> activePreviews = new HashMap<>();
+
+    private static int previewTickCounter = 0;
+
+    /** Particle wireframe is refreshed every N ticks. */
+    private static final int PREVIEW_TICK_INTERVAL = 10;
 
     private MsfCommands() {}
 
@@ -92,6 +120,7 @@ public final class MsfCommands {
                 .then(buildExtractCommand())
                 .then(buildPlaceCommand())
                 .then(buildListCommand())
+                .then(buildPreviewCommand())
         );
     }
 
@@ -221,6 +250,48 @@ public final class MsfCommands {
                         ctx.getSource(), IntegerArgumentType.getInteger(ctx, "page")
                     ))
                 )
+            );
+    }
+
+    private static com.mojang.brigadier.builder.LiteralArgumentBuilder<ServerCommandSource> buildPreviewCommand() {
+        return CommandManager.literal("preview")
+            // /msf preview off
+            .then(CommandManager.literal("off")
+                .executes(ctx -> {
+                    ServerCommandSource source = ctx.getSource();
+                    Entity entity = source.getEntity();
+                    if (entity instanceof ServerPlayerEntity player) {
+                        clearPreview(player.getUuid());
+                        source.sendFeedback(() -> Text.literal("Preview cancelled."), false);
+                    }
+                    return 1;
+                })
+            )
+            // /msf preview <filename>
+            .then(CommandManager.argument("filename", StringArgumentType.word())
+                .suggests((ctx, b) -> {
+                    if (Files.isDirectory(SCHEMATICS_DIR)) {
+                        try (Stream<Path> stream = Files.list(SCHEMATICS_DIR)) {
+                            stream.filter(p -> p.getFileName().toString().endsWith(".msf"))
+                                .forEach(p -> b.suggest(
+                                    p.getFileName().toString().replace(".msf", "")));
+                        } catch (IOException ignored) {}
+                    }
+                    return b.buildFuture();
+                })
+                .executes(ctx -> {
+                    ServerCommandSource source = ctx.getSource();
+                    Entity entity = source.getEntity();
+                    if (!(entity instanceof ServerPlayerEntity player)) {
+                        source.sendFeedback(
+                            () -> Text.literal("preview requires a player source."), false);
+                        return 0;
+                    }
+                    String filename = StringArgumentType.getString(ctx, "filename");
+                    Path inputPath = SCHEMATICS_DIR.resolve(filename + ".msf");
+                    return executePreview(source.getWorld(), player, inputPath,
+                        msg -> source.sendFeedback(() -> msg, false));
+                })
             );
     }
 
@@ -574,6 +645,184 @@ public final class MsfCommands {
             // Truncate long messages to keep the chat line readable
             if (msg.length() > 60) msg = msg.substring(0, 57) + "...";
             return "[error: " + msg + "]";
+        }
+    }
+
+    // =========================================================================
+    // Preview logic
+    // =========================================================================
+
+    /**
+     * Called every server tick. Refreshes active particle wireframes every
+     * {@link #PREVIEW_TICK_INTERVAL} ticks.
+     *
+     * <p>Intended to be registered as a {@code ServerTickEvents.END_SERVER_TICK} handler.
+     *
+     * @param server the running Minecraft server
+     */
+    public static void tickPreviews(MinecraftServer server) {
+        if (activePreviews.isEmpty()) return;
+        previewTickCounter++;
+        if (previewTickCounter % PREVIEW_TICK_INTERVAL != 0) return;
+        for (Map.Entry<UUID, ActivePreview> entry : activePreviews.entrySet()) {
+            ServerPlayerEntity player = server.getPlayerManager().getPlayer(entry.getKey());
+            if (player == null) continue;
+            ActivePreview p = entry.getValue();
+            spawnBoxParticles(p.world(), player, p.minX(), p.minY(), p.minZ(), p.maxX(), p.maxY(), p.maxZ());
+        }
+    }
+
+    /**
+     * Removes the active preview for the given player UUID, if any.
+     *
+     * <p>Intended to be called from a {@code ServerPlayConnectionEvents.DISCONNECT} handler.
+     *
+     * @param playerUuid the UUID of the disconnecting or cancelling player
+     */
+    public static void clearPreview(UUID playerUuid) {
+        activePreviews.remove(playerUuid);
+    }
+
+    /**
+     * Registers a particle wireframe preview for {@code player} using the bounding box
+     * computed from all regions in the given MSF file. The anchor is derived from the
+     * player's look target (raycasted block face, or player feet if no block is hit).
+     *
+     * <p>The wireframe is re-spawned every {@link #PREVIEW_TICK_INTERVAL} ticks until
+     * the player runs {@code /msf preview off} or disconnects.
+     *
+     * @param world     the world in which to spawn particles
+     * @param player    the player who issued the preview command
+     * @param inputPath path to the {@code .msf} file
+     * @param feedback  receives feedback text (success or error messages)
+     * @return {@code 1} on success, {@code 0} on failure
+     */
+    public static int executePreview(
+        ServerWorld world,
+        ServerPlayerEntity player,
+        Path inputPath,
+        Consumer<Text> feedback
+    ) {
+        if (!Files.exists(inputPath)) {
+            feedback.accept(Text.literal("File not found: " + inputPath.getFileName()));
+            return 0;
+        }
+
+        MsfFile file;
+        try {
+            byte[] bytes = Files.readAllBytes(inputPath);
+            file = MsfReader.readFile(bytes, MsfReaderConfig.DEFAULT, null);
+        } catch (MsfException | IOException e) {
+            feedback.accept(Text.literal("Error reading MSF file: " + e.getMessage()));
+            return 0;
+        }
+
+        // Compute the union bounding box over all regions across all layers
+        int minOX = Integer.MAX_VALUE, minOY = Integer.MAX_VALUE, minOZ = Integer.MAX_VALUE;
+        int maxOX = Integer.MIN_VALUE, maxOY = Integer.MIN_VALUE, maxOZ = Integer.MIN_VALUE;
+        for (MsfLayer layer : file.layerIndex().layers()) {
+            for (MsfRegion region : layer.regions()) {
+                minOX = Math.min(minOX, region.originX());
+                minOY = Math.min(minOY, region.originY());
+                minOZ = Math.min(minOZ, region.originZ());
+                maxOX = Math.max(maxOX, region.originX() + region.sizeX() - 1);
+                maxOY = Math.max(maxOY, region.originY() + region.sizeY() - 1);
+                maxOZ = Math.max(maxOZ, region.originZ() + region.sizeZ() - 1);
+            }
+        }
+
+        if (minOX == Integer.MAX_VALUE) {
+            feedback.accept(Text.literal("File has no regions to preview."));
+            return 0;
+        }
+
+        // Anchor: face of the block the player is looking at, or player feet
+        BlockPos anchor = computePreviewAnchor(player);
+
+        int worldMinX = anchor.getX() + minOX;
+        int worldMinY = anchor.getY() + minOY;
+        int worldMinZ = anchor.getZ() + minOZ;
+        int worldMaxX = anchor.getX() + maxOX;
+        int worldMaxY = anchor.getY() + maxOY;
+        int worldMaxZ = anchor.getZ() + maxOZ;
+
+        ActivePreview preview = new ActivePreview(
+            world, worldMinX, worldMinY, worldMinZ, worldMaxX, worldMaxY, worldMaxZ);
+        activePreviews.put(player.getUuid(), preview);
+
+        // Spawn immediately without waiting for the first tick interval
+        spawnBoxParticles(world, player, worldMinX, worldMinY, worldMinZ, worldMaxX, worldMaxY, worldMaxZ);
+
+        int sX = worldMaxX - worldMinX + 1;
+        int sY = worldMaxY - worldMinY + 1;
+        int sZ = worldMaxZ - worldMinZ + 1;
+        feedback.accept(Text.literal(
+            "Preview: " + inputPath.getFileName() + " — "
+                + sX + "\u00d7" + sY + "\u00d7" + sZ
+                + " at (" + worldMinX + ", " + worldMinY + ", " + worldMinZ + ")"
+        ));
+        return 1;
+    }
+
+    /**
+     * Returns the anchor {@link BlockPos} for a preview: the empty block face adjacent to
+     * the block the player is looking at (up to 8 blocks away), or the player's feet
+     * position if no block is hit.
+     */
+    private static BlockPos computePreviewAnchor(ServerPlayerEntity player) {
+        HitResult hit = player.raycast(8.0, 1.0f, false);
+        if (hit.getType() == HitResult.Type.BLOCK) {
+            BlockHitResult blockHit = (BlockHitResult) hit;
+            return blockHit.getBlockPos().offset(blockHit.getSide());
+        }
+        return player.getBlockPos();
+    }
+
+    /**
+     * Spawns end-rod particles along all 12 edges of the axis-aligned bounding box
+     * defined by the inclusive block coordinates {@code (minX,minY,minZ)}–{@code (maxX,maxY,maxZ)}.
+     * One particle is spawned at the center of each block position along each edge.
+     */
+    private static void spawnBoxParticles(
+        ServerWorld world, ServerPlayerEntity player,
+        int minX, int minY, int minZ,
+        int maxX, int maxY, int maxZ
+    ) {
+        // 4 edges parallel to X
+        spawnEdge(world, player, minX, minY, minZ, maxX, minY, minZ);
+        spawnEdge(world, player, minX, maxY, minZ, maxX, maxY, minZ);
+        spawnEdge(world, player, minX, minY, maxZ, maxX, minY, maxZ);
+        spawnEdge(world, player, minX, maxY, maxZ, maxX, maxY, maxZ);
+        // 4 edges parallel to Y
+        spawnEdge(world, player, minX, minY, minZ, minX, maxY, minZ);
+        spawnEdge(world, player, maxX, minY, minZ, maxX, maxY, minZ);
+        spawnEdge(world, player, minX, minY, maxZ, minX, maxY, maxZ);
+        spawnEdge(world, player, maxX, minY, maxZ, maxX, maxY, maxZ);
+        // 4 edges parallel to Z
+        spawnEdge(world, player, minX, minY, minZ, minX, minY, maxZ);
+        spawnEdge(world, player, maxX, minY, minZ, maxX, minY, maxZ);
+        spawnEdge(world, player, minX, maxY, minZ, minX, maxY, maxZ);
+        spawnEdge(world, player, maxX, maxY, minZ, maxX, maxY, maxZ);
+    }
+
+    /**
+     * Spawns one end-rod particle at the center of each block position along the
+     * axis-aligned edge from {@code (x1,y1,z1)} to {@code (x2,y2,z2)} (inclusive).
+     * The edge must be axis-aligned (only one of X, Y, or Z varies).
+     */
+    private static void spawnEdge(
+        ServerWorld world, ServerPlayerEntity player,
+        int x1, int y1, int z1,
+        int x2, int y2, int z2
+    ) {
+        int dx = Integer.signum(x2 - x1);
+        int dy = Integer.signum(y2 - y1);
+        int dz = Integer.signum(z2 - z1);
+        int length = Math.max(Math.max(Math.abs(x2 - x1), Math.abs(y2 - y1)), Math.abs(z2 - z1));
+        for (int i = 0; i <= length; i++) {
+            world.spawnParticles(player, ParticleTypes.END_ROD, true, false,
+                x1 + dx * i + 0.5, y1 + dy * i + 0.5, z1 + dz * i + 0.5,
+                1, 0, 0, 0, 0);
         }
     }
 
