@@ -70,6 +70,20 @@ Current state is always in `docs/STUDIO_STATE.md`. Read it first.
 - Pending ticks from Litematica are silently dropped — rested-state placement is correct behavior
 - Property ordering in converters uses accept-and-warn rather than bundling blocks.json
 
+## Session Closeout Requirements
+
+Every implementation session MUST end with all work committed and pushed before the handoff card is produced. Leaving changes uncommitted causes non-fast-forward push failures when planning documents are committed in a separate operation afterward.
+
+The final step of every session, before producing the handoff card:
+
+```
+git add -A
+git commit -m "<type>: <description>"
+git push origin <branch>
+```
+
+Do not produce a handoff card until `git status` shows a clean working tree.
+
 ## Environment Constraints (coding sessions)
 
 - Network access is disabled — no apt, brew, curl, wget, pip, npm
