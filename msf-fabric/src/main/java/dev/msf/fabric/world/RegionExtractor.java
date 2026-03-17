@@ -12,6 +12,8 @@ import dev.msf.fabric.bridge.EntityBridge;
 import net.minecraft.block.BlockState;
 import net.minecraft.block.entity.BlockEntity;
 import net.minecraft.entity.Entity;
+import net.minecraft.entity.LivingEntity;
+import net.minecraft.entity.decoration.ArmorStandEntity;
 import net.minecraft.entity.player.PlayerEntity;
 import net.minecraft.registry.entry.RegistryEntry;
 import net.minecraft.server.world.ServerWorld;
@@ -183,11 +185,9 @@ public final class RegionExtractor {
     // =========================================================================
 
     /**
-     * Extracts all non-player entities whose position falls within {@code bounds}
-     * and returns them as {@link MsfEntity} records (Section 8).
-     *
-     * <p>UUIDs are stripped from each entity's NBT payload, and the {@code id} tag
-     * is removed, as required by Section 8.2. Player entities are excluded.
+     * Extracts non-player entities within {@code bounds} using the default capture policy:
+     * living mobs (subtypes of {@link LivingEntity} other than {@link ArmorStandEntity}) are
+     * excluded. Delegates to {@link #extractEntities(ServerWorld, BlockBox, BlockPos, boolean)}.
      *
      * @param world     the source world
      * @param bounds    the axis-aligned bounding box to search
@@ -200,14 +200,48 @@ public final class RegionExtractor {
         BlockBox bounds,
         BlockPos anchorPos
     ) {
+        return extractEntities(world, bounds, anchorPos, false);
+    }
+
+    /**
+     * Extracts non-player entities within {@code bounds} and returns them as
+     * {@link MsfEntity} records (Section 8).
+     *
+     * <h2>Capture policy</h2>
+     * Players are always excluded. When {@code includeLivingMobs} is {@code false}
+     * (the default), any entity whose runtime type is a subtype of {@link LivingEntity}
+     * is also excluded — <em>except</em> {@link ArmorStandEntity}, which is always
+     * captured regardless of this flag. Item frames and other non-living decorations
+     * are always captured because they do not extend {@link LivingEntity}.
+     * When {@code includeLivingMobs} is {@code true} all non-player entities are captured.
+     *
+     * <p>UUIDs are stripped from each entity's NBT payload and the {@code id} tag is
+     * removed per Section 8.2.
+     *
+     * @param world             the source world
+     * @param bounds            the axis-aligned bounding box to search
+     * @param anchorPos         the schematic anchor in world coordinates; entity positions are
+     *                          recorded relative to this point
+     * @param includeLivingMobs when {@code true}, living mob entities (e.g. villagers, zombies)
+     *                          are captured in addition to non-living entities and armor stands
+     * @return a mutable list of extracted entities (empty if none found)
+     */
+    public static List<MsfEntity> extractEntities(
+        ServerWorld world,
+        BlockBox bounds,
+        BlockPos anchorPos,
+        boolean includeLivingMobs
+    ) {
         // Expand the Box by 1 on the + side so the upper bounds are inclusive
         Box searchBox = new Box(
             bounds.getMinX(), bounds.getMinY(), bounds.getMinZ(),
             bounds.getMaxX() + 1, bounds.getMaxY() + 1, bounds.getMaxZ() + 1
         );
         List<MsfEntity> result = new ArrayList<>();
-        for (Entity entity : world.getEntitiesByClass(Entity.class, searchBox,
-                e -> !(e instanceof PlayerEntity))) {
+        for (Entity entity : world.getEntitiesByClass(Entity.class, searchBox, e ->
+                !(e instanceof PlayerEntity)
+                && (includeLivingMobs || !(e instanceof LivingEntity) || e instanceof ArmorStandEntity)
+        )) {
             result.add(EntityBridge.fromEntity(entity, anchorPos));
         }
         return result;

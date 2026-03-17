@@ -100,22 +100,48 @@ public final class MsfCommands {
             .then(CommandManager.argument("pos1", BlockPosArgumentType.blockPos())
             .then(CommandManager.argument("pos2", BlockPosArgumentType.blockPos())
             .then(CommandManager.argument("filename", StringArgumentType.word())
-                .executes(ctx -> {
-                    BlockPos pos1 = BlockPosArgumentType.getBlockPos(ctx, "pos1");
-                    BlockPos pos2 = BlockPosArgumentType.getBlockPos(ctx, "pos2");
-                    String filename = StringArgumentType.getString(ctx, "filename");
-
-                    ServerCommandSource source = ctx.getSource();
-                    BlockBox bounds = BlockBox.create(pos1, pos2);
-                    Path outputPath = SCHEMATICS_DIR.resolve(filename + ".msf");
-
-                    return executeExtract(
-                        source.getWorld(), bounds, facingFromSource(source), outputPath,
-                        msg -> source.sendFeedback(() -> msg, false)
-                    );
-                })
+                // No flags — existing v1.0.0 behaviour
+                .executes(ctx -> executeExtractCmd(ctx, false, 1))
+                // --living-mobs [--layers N]
+                .then(CommandManager.literal("--living-mobs")
+                    .executes(ctx -> executeExtractCmd(ctx, true, 1))
+                    .then(CommandManager.literal("--layers")
+                    .then(CommandManager.argument("numLayers", IntegerArgumentType.integer(1))
+                        .executes(ctx -> executeExtractCmd(
+                            ctx, true, IntegerArgumentType.getInteger(ctx, "numLayers")))
+                    ))
+                )
+                // --layers N [--living-mobs]
+                .then(CommandManager.literal("--layers")
+                .then(CommandManager.argument("numLayers", IntegerArgumentType.integer(1))
+                    .executes(ctx -> executeExtractCmd(
+                        ctx, false, IntegerArgumentType.getInteger(ctx, "numLayers")))
+                    .then(CommandManager.literal("--living-mobs")
+                        .executes(ctx -> executeExtractCmd(
+                            ctx, true, IntegerArgumentType.getInteger(ctx, "numLayers")))
+                    )
+                ))
             )))
         ;
+    }
+
+    /** Extracts pos1, pos2, filename, and source from {@code ctx} and delegates to {@link #executeExtract}. */
+    private static int executeExtractCmd(
+        CommandContext<ServerCommandSource> ctx,
+        boolean includeLivingMobs,
+        int numLayers
+    ) {
+        BlockPos pos1 = BlockPosArgumentType.getBlockPos(ctx, "pos1");
+        BlockPos pos2 = BlockPosArgumentType.getBlockPos(ctx, "pos2");
+        String filename = StringArgumentType.getString(ctx, "filename");
+        ServerCommandSource source = ctx.getSource();
+        BlockBox bounds = BlockBox.create(pos1, pos2);
+        Path outputPath = SCHEMATICS_DIR.resolve(filename + ".msf");
+        return executeExtract(
+            source.getWorld(), bounds, facingFromSource(source),
+            includeLivingMobs, numLayers, outputPath,
+            msg -> source.sendFeedback(() -> msg, false)
+        );
     }
 
     private static com.mojang.brigadier.builder.LiteralArgumentBuilder<ServerCommandSource> buildPlaceCommand() {
@@ -203,11 +229,11 @@ public final class MsfCommands {
     // =========================================================================
 
     /**
-     * Extracts the given bounding box from {@code world} and writes an MSF file.
+     * Extracts the given bounding box from {@code world} and writes a single-layer MSF file
+     * with default entity capture policy (living mobs excluded).
      *
-     * <p>The anchor is always the minimum corner of {@code bounds}. The region is
-     * stored in a single layer named {@code "layer"} with the given {@code facing}
-     * as the canonical facing in the metadata.
+     * <p>Delegates to
+     * {@link #executeExtract(ServerWorld, BlockBox, CanonicalFacing, boolean, int, Path, Consumer)}.
      *
      * @param world      the source world
      * @param bounds     the region to extract
@@ -223,6 +249,47 @@ public final class MsfCommands {
         Path outputPath,
         Consumer<Text> feedback
     ) {
+        return executeExtract(world, bounds, facing, false, 1, outputPath, feedback);
+    }
+
+    /**
+     * Extracts the given bounding box from {@code world} and writes an MSF file.
+     *
+     * <h2>Layers</h2>
+     * When {@code numLayers} is 1 (the default), the entire bounds is stored as a single
+     * region in a single layer — identical to v1.0.0 behaviour. When {@code numLayers > 1},
+     * the vertical extent is subdivided into {@code numLayers} horizontal layers using
+     * ceiling division: each layer has height {@code ceil(totalHeight / numLayers)}, except
+     * the last which receives the remainder. Each layer contains one region extracted
+     * independently with the shared global palette.
+     *
+     * <h2>Entity capture policy</h2>
+     * When {@code includeLivingMobs} is {@code false}, living mob entities (subtypes of
+     * {@link net.minecraft.entity.LivingEntity} other than armor stands) are excluded from
+     * the entity block. Armor stands and non-living entities (item frames, etc.) are always
+     * captured. Pass {@code true} to opt in to capturing all non-player entities.
+     *
+     * <h2>Anchor</h2>
+     * The anchor is always the minimum corner of {@code bounds}.
+     *
+     * @param world             the source world
+     * @param bounds            the region to extract
+     * @param facing            canonical facing to embed in the MSF metadata
+     * @param includeLivingMobs when {@code true}, living mob entities are captured
+     * @param numLayers         number of horizontal layers to split the region into (≥ 1)
+     * @param outputPath        path to write the MSF file; parent directory created if absent
+     * @param feedback          receives feedback text (success or error messages)
+     * @return {@code 1} on success, {@code 0} on failure
+     */
+    public static int executeExtract(
+        ServerWorld world,
+        BlockBox bounds,
+        CanonicalFacing facing,
+        boolean includeLivingMobs,
+        int numLayers,
+        Path outputPath,
+        Consumer<Text> feedback
+    ) {
         Path parent = outputPath.getParent();
         if (parent != null) {
             try {
@@ -234,17 +301,37 @@ public final class MsfCommands {
         }
 
         BlockPos anchor = new BlockPos(bounds.getMinX(), bounds.getMinY(), bounds.getMinZ());
+
+        // Shared palette across all layers (Section 4.3 — single global palette per file)
         List<String> palette = new ArrayList<>();
-        MsfRegion region;
-        try {
-            region = RegionExtractor.extract(world, bounds, anchor, false, palette);
-        } catch (MsfPaletteException e) {
-            feedback.accept(Text.literal("Error: palette overflow — " + e.getMessage()));
-            return 0;
+
+        // Build layers by subdividing the vertical extent
+        int totalHeight = bounds.getBlockCountY();
+        int baseLayerHeight = (totalHeight + numLayers - 1) / numLayers; // ceil division
+        List<MsfLayer> layers = new ArrayList<>();
+
+        int yOffset = 0;
+        for (int i = 0; i < numLayers && yOffset < totalHeight; i++) {
+            int thisHeight = Math.min(baseLayerHeight, totalHeight - yOffset);
+            BlockBox layerBounds = new BlockBox(
+                bounds.getMinX(), bounds.getMinY() + yOffset, bounds.getMinZ(),
+                bounds.getMaxX(), bounds.getMinY() + yOffset + thisHeight - 1, bounds.getMaxZ()
+            );
+            MsfRegion region;
+            try {
+                region = RegionExtractor.extract(world, layerBounds, anchor, false, palette);
+            } catch (MsfPaletteException e) {
+                feedback.accept(Text.literal("Error: palette overflow — " + e.getMessage()));
+                return 0;
+            }
+            // Single-layer: use "layer" for backwards compat; multi-layer: "layer1", "layer2", …
+            String layerName = (numLayers == 1) ? "layer" : ("layer" + (i + 1));
+            layers.add(MsfLayer.builder().layerId(i + 1).name(layerName).addRegion(region).build());
+            yOffset += thisHeight;
         }
 
-        // Capture entities and block entities within the bounds (Section 8, Section 9)
-        List<MsfEntity> entities = RegionExtractor.extractEntities(world, bounds, anchor);
+        // Capture entities and block entities from the full bounds (Section 8, Section 9)
+        List<MsfEntity> entities = RegionExtractor.extractEntities(world, bounds, anchor, includeLivingMobs);
         List<MsfBlockEntity> blockEntities = RegionExtractor.extractBlockEntities(world, bounds, anchor);
 
         try {
@@ -257,9 +344,7 @@ public final class MsfCommands {
                     .mcEdition(MsfMetadata.EDITION_JAVA)
                     .build())
                 .palette(MsfPalette.of(new ArrayList<>(palette)))
-                .layerIndex(MsfLayerIndex.of(List.of(
-                    MsfLayer.builder().layerId(1).name("layer").addRegion(region).build()
-                )));
+                .layerIndex(MsfLayerIndex.of(layers));
             // Only set entity/block-entity blocks when content was found;
             // absent blocks leave feature flag bits 0 and 1 clear (spec Section 3.3)
             if (!entities.isEmpty()) {
@@ -274,10 +359,11 @@ public final class MsfCommands {
             return 0;
         }
 
+        String layerNote = (layers.size() > 1) ? " (" + layers.size() + " layers)" : "";
         feedback.accept(Text.literal(
             "Extracted " + bounds.getBlockCountX() + "\u00d7"
                 + bounds.getBlockCountY() + "\u00d7" + bounds.getBlockCountZ()
-                + " region to " + outputPath.getFileName()
+                + " region to " + outputPath.getFileName() + layerNote
         ));
         return 1;
     }

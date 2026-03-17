@@ -12,8 +12,8 @@ Revision: V1_O
 Status: Stable — no open issues. No spec changes required for v1.1.0.
 
 ## Implementation
-Sessions completed: 1–15
-Last session: Session 15 — /msf place --rotate and --mirror flags; CanonicalFacing.rotateClockwise; PlacementOptions mirror component; RegionPlacer mirror-then-rotate for blocks and block entities; 9 new tests. Commit 3f13ec3.
+Sessions completed: 1–16
+Last session: Session 16 — Epic 4 (entity capture policy: --living-mobs flag, default excludes living mobs except armor stands) + Epic 5 (--layers N in /msf extract: ceil-division vertical subdivision, shared palette); 4 new gametests.
 
 ## Active Branch
 feature/v1.1.0

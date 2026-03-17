@@ -3,6 +3,7 @@ package dev.msf.fabric.test;
 import dev.msf.core.io.MsfReader;
 import dev.msf.core.io.MsfReaderConfig;
 import dev.msf.core.model.MsfFile;
+import dev.msf.core.model.MsfLayer;
 import dev.msf.core.model.MsfRegion;
 import dev.msf.fabric.command.MsfCommands;
 import dev.msf.fabric.world.CanonicalFacing;
@@ -10,7 +11,9 @@ import net.minecraft.block.BlockState;
 import net.minecraft.block.Blocks;
 import net.minecraft.block.entity.ChestBlockEntity;
 import net.minecraft.entity.EntityType;
+import net.minecraft.entity.SpawnReason;
 import net.minecraft.entity.decoration.ArmorStandEntity;
+import net.minecraft.entity.passive.VillagerEntity;
 import net.minecraft.item.ItemStack;
 import net.minecraft.item.Items;
 import net.minecraft.server.world.ServerWorld;
@@ -435,6 +438,205 @@ public class MsfCommandsTest {
                 world, pos, CanonicalFacing.NORTH, output, msg -> feedbackText.set(msg.getString())
             );
             ctx.assertTrue(result == 1, "Place of no-entity file must return 1; feedback: " + feedbackText.get());
+        } finally {
+            Files.deleteIfExists(output);
+        }
+        ctx.complete();
+    }
+
+    // =========================================================================
+    // 12. Entity capture policy — no flag: villager excluded, armor stand captured
+    // =========================================================================
+
+    @GameTest(structure = "fabric-gametest-api-v1:empty")
+    public void extractDefaultPolicy_excludesVillager_includesArmorStand(TestContext ctx) throws Exception {
+        ServerWorld world = ctx.getWorld();
+
+        // Spawn a villager (LivingEntity — excluded by default)
+        BlockPos villagerRelPos = new BlockPos(1, 1, 1);
+        BlockPos villagerAbsPos = ctx.getAbsolutePos(villagerRelPos);
+        VillagerEntity villager = EntityType.VILLAGER.create(world, SpawnReason.LOAD);
+        if (villager == null) throw new AssertionError("EntityType.VILLAGER.create() returned null");
+        villager.setPosition(villagerAbsPos.getX() + 0.5, villagerAbsPos.getY(), villagerAbsPos.getZ() + 0.5);
+        world.spawnEntity(villager);
+
+        // Spawn an armor stand (LivingEntity subtype — always captured regardless of flag)
+        BlockPos standRelPos = new BlockPos(2, 1, 2);
+        BlockPos standAbsPos = ctx.getAbsolutePos(standRelPos);
+        ArmorStandEntity stand = EntityType.ARMOR_STAND.create(world, SpawnReason.LOAD);
+        if (stand == null) throw new AssertionError("EntityType.ARMOR_STAND.create() returned null");
+        stand.setPosition(standAbsPos.getX() + 0.5, standAbsPos.getY(), standAbsPos.getZ() + 0.5);
+        world.spawnEntity(stand);
+
+        BlockPos from = ctx.getAbsolutePos(new BlockPos(0, 0, 0));
+        BlockPos to   = ctx.getAbsolutePos(new BlockPos(4, 2, 4));
+        BlockBox bounds = BlockBox.create(from, to);
+
+        Path output = Files.createTempFile("msf-policy-default-", ".msf");
+        try {
+            // Default: includeLivingMobs=false, numLayers=1
+            int result = MsfCommands.executeExtract(
+                world, bounds, CanonicalFacing.NORTH, false, 1, output, msg -> {}
+            );
+            ctx.assertTrue(result == 1, "executeExtract (default policy) must return 1");
+
+            byte[] bytes = Files.readAllBytes(output);
+            MsfFile file = MsfReader.readFile(bytes, MsfReaderConfig.DEFAULT, null);
+
+            ctx.assertTrue(file.entities().isPresent() && !file.entities().get().isEmpty(),
+                "Entity block must be present (armor stand must be captured)");
+
+            boolean hasVillager = file.entities().get().stream()
+                .anyMatch(e -> e.entityType().equals("minecraft:villager"));
+            boolean hasArmorStand = file.entities().get().stream()
+                .anyMatch(e -> e.entityType().equals("minecraft:armor_stand"));
+
+            ctx.assertTrue(!hasVillager, "Villager must NOT be captured with default policy");
+            ctx.assertTrue(hasArmorStand, "Armor stand MUST be captured with default policy");
+        } finally {
+            Files.deleteIfExists(output);
+        }
+        ctx.complete();
+    }
+
+    // =========================================================================
+    // 13. Entity capture policy — --living-mobs flag: villager and armor stand both captured
+    // =========================================================================
+
+    @GameTest(structure = "fabric-gametest-api-v1:empty")
+    public void extractWithLivingMobsFlag_capturesBoth(TestContext ctx) throws Exception {
+        ServerWorld world = ctx.getWorld();
+
+        // Spawn a villager
+        BlockPos villagerAbsPos = ctx.getAbsolutePos(new BlockPos(1, 1, 1));
+        VillagerEntity villager = EntityType.VILLAGER.create(world, SpawnReason.LOAD);
+        if (villager == null) throw new AssertionError("EntityType.VILLAGER.create() returned null");
+        villager.setPosition(villagerAbsPos.getX() + 0.5, villagerAbsPos.getY(), villagerAbsPos.getZ() + 0.5);
+        world.spawnEntity(villager);
+
+        // Spawn an armor stand
+        BlockPos standAbsPos = ctx.getAbsolutePos(new BlockPos(2, 1, 2));
+        ArmorStandEntity stand = EntityType.ARMOR_STAND.create(world, SpawnReason.LOAD);
+        if (stand == null) throw new AssertionError("EntityType.ARMOR_STAND.create() returned null");
+        stand.setPosition(standAbsPos.getX() + 0.5, standAbsPos.getY(), standAbsPos.getZ() + 0.5);
+        world.spawnEntity(stand);
+
+        BlockPos from = ctx.getAbsolutePos(new BlockPos(0, 0, 0));
+        BlockPos to   = ctx.getAbsolutePos(new BlockPos(4, 2, 4));
+        BlockBox bounds = BlockBox.create(from, to);
+
+        Path output = Files.createTempFile("msf-policy-livingmobs-", ".msf");
+        try {
+            // includeLivingMobs=true
+            int result = MsfCommands.executeExtract(
+                world, bounds, CanonicalFacing.NORTH, true, 1, output, msg -> {}
+            );
+            ctx.assertTrue(result == 1, "executeExtract (--living-mobs) must return 1");
+
+            byte[] bytes = Files.readAllBytes(output);
+            MsfFile file = MsfReader.readFile(bytes, MsfReaderConfig.DEFAULT, null);
+
+            ctx.assertTrue(file.entities().isPresent() && file.entities().get().size() >= 2,
+                "Entity block must contain at least 2 entities (villager + armor stand)");
+
+            boolean hasVillager = file.entities().get().stream()
+                .anyMatch(e -> e.entityType().equals("minecraft:villager"));
+            boolean hasArmorStand = file.entities().get().stream()
+                .anyMatch(e -> e.entityType().equals("minecraft:armor_stand"));
+
+            ctx.assertTrue(hasVillager, "Villager MUST be captured with --living-mobs");
+            ctx.assertTrue(hasArmorStand, "Armor stand MUST be captured with --living-mobs");
+        } finally {
+            Files.deleteIfExists(output);
+        }
+        ctx.complete();
+    }
+
+    // =========================================================================
+    // 14. --layers 2 on a 10-block-tall region: two layers of height 5 each
+    // =========================================================================
+
+    @GameTest(structure = "fabric-gametest-api-v1:empty")
+    public void extractWithLayers2_tenBlockTall_twoLayersOfFive(TestContext ctx) throws Exception {
+        // Place stone through the full 10-block column so the extract has real content
+        ServerWorld world = ctx.getWorld();
+        for (int y = 1; y <= 10; y++) {
+            ctx.setBlockState(1, y, 1, Blocks.STONE.getDefaultState());
+        }
+
+        BlockPos from = ctx.getAbsolutePos(new BlockPos(0, 1, 0));
+        BlockPos to   = ctx.getAbsolutePos(new BlockPos(2, 10, 2));
+        BlockBox bounds = BlockBox.create(from, to);
+
+        Path output = Files.createTempFile("msf-layers2-", ".msf");
+        try {
+            int result = MsfCommands.executeExtract(
+                world, bounds, CanonicalFacing.NORTH, false, 2, output, msg -> {}
+            );
+            ctx.assertTrue(result == 1, "executeExtract --layers 2 must return 1");
+
+            byte[] bytes = Files.readAllBytes(output);
+            MsfFile file = MsfReader.readFile(bytes, MsfReaderConfig.DEFAULT, null);
+            List<MsfLayer> layers = file.layerIndex().layers();
+
+            ctx.assertTrue(layers.size() == 2, "Must produce 2 layers; got " + layers.size());
+
+            // Layer 0: y-offset=0, height=5 (blocks minY+0 to minY+4)
+            MsfRegion r0 = layers.get(0).regions().get(0);
+            ctx.assertTrue(r0.sizeY() == 5,
+                "Layer 0 must have height 5; got " + r0.sizeY());
+            ctx.assertTrue(r0.originY() == 0,
+                "Layer 0 must have originY=0; got " + r0.originY());
+
+            // Layer 1: y-offset=5, height=5 (blocks minY+5 to minY+9)
+            MsfRegion r1 = layers.get(1).regions().get(0);
+            ctx.assertTrue(r1.sizeY() == 5,
+                "Layer 1 must have height 5; got " + r1.sizeY());
+            ctx.assertTrue(r1.originY() == 5,
+                "Layer 1 must have originY=5; got " + r1.originY());
+        } finally {
+            Files.deleteIfExists(output);
+        }
+        ctx.complete();
+    }
+
+    // =========================================================================
+    // 15. --layers 3 on a 7-block-tall region: heights 3, 3, 1
+    // =========================================================================
+
+    @GameTest(structure = "fabric-gametest-api-v1:empty")
+    public void extractWithLayers3_sevenBlockTall_heightsThreeThreeOne(TestContext ctx) throws Exception {
+        ServerWorld world = ctx.getWorld();
+        for (int y = 1; y <= 7; y++) {
+            ctx.setBlockState(1, y, 1, Blocks.STONE.getDefaultState());
+        }
+
+        BlockPos from = ctx.getAbsolutePos(new BlockPos(0, 1, 0));
+        BlockPos to   = ctx.getAbsolutePos(new BlockPos(2, 7, 2));
+        BlockBox bounds = BlockBox.create(from, to);
+
+        Path output = Files.createTempFile("msf-layers3-", ".msf");
+        try {
+            int result = MsfCommands.executeExtract(
+                world, bounds, CanonicalFacing.NORTH, false, 3, output, msg -> {}
+            );
+            ctx.assertTrue(result == 1, "executeExtract --layers 3 must return 1");
+
+            byte[] bytes = Files.readAllBytes(output);
+            MsfFile file = MsfReader.readFile(bytes, MsfReaderConfig.DEFAULT, null);
+            List<MsfLayer> layers = file.layerIndex().layers();
+
+            ctx.assertTrue(layers.size() == 3, "Must produce 3 layers; got " + layers.size());
+
+            int[] expectedHeights  = {3, 3, 1};
+            int[] expectedOriginYs = {0, 3, 6};
+            for (int i = 0; i < 3; i++) {
+                MsfRegion r = layers.get(i).regions().get(0);
+                ctx.assertTrue(r.sizeY() == expectedHeights[i],
+                    "Layer " + i + " must have height " + expectedHeights[i] + "; got " + r.sizeY());
+                ctx.assertTrue(r.originY() == expectedOriginYs[i],
+                    "Layer " + i + " must have originY=" + expectedOriginYs[i] + "; got " + r.originY());
+            }
         } finally {
             Files.deleteIfExists(output);
         }
